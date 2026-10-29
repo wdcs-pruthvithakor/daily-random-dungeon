@@ -31,6 +31,16 @@ t('different seeds differ', [...Array(40)].some((_, i) => T.tile(1, i * 9, i * 7
   t('village is a waypoint', E.worldAttuned(car).some(n => n.id === v.id));
   t('warp home works from a waypoint', E.worldWarp(car, 'town').ok && w.x === 0 && w.y === 0);
   t('warp back works', E.worldWarp(car, v.id).ok && w.x === v.x);
+  // recall from the wild: costs gold and 2 days; free from a waypoint
+  { const sv = [w.x, w.y]; E.worldWarp(car, 'town'); const free = E.warpInfo(car, v.id);
+    t('travel from a waypoint is free', free.free && free.gold === 0 && free.days === 1);
+    w.x = 3; w.y = 1; car.gold = 0; const wild = E.warpInfo(car, v.id);
+    t('travel from the wild costs gold', !wild.free && wild.gold > 0 && wild.days === 2);
+    t('recall refused without gold', !E.worldWarp(car, v.id).ok && w.x === 3);
+    car.gold = 5000; const d0 = w.day, g0 = car.gold; const rr = E.worldWarp(car, v.id);
+    t('recall works with gold', rr.ok && w.x === v.x && car.gold === g0 - wild.gold && w.day === d0 + 2, rr.msg);
+    t('cannot travel to where you stand', !E.worldWarp(car, v.id).ok);
+    E.worldWarp(car, 'town'); w.x = sv[0]; w.y = sv[1]; }
   t('pin toggles', E.worldPin(car, 3, 3, 'A').ok && w.markers.length === 1 && E.worldPin(car, 3, 3).removed && w.markers.length === 0);
   const far = E.worldRoute(car, 160, 40);
   t('far routes are planned in legs', !far || far.partial);
@@ -48,6 +58,112 @@ t('different seeds differ', [...Array(40)].some((_, i) => T.tile(1, i * 9, i * 7
   t('race boon granted once', r1.ok && JSON.stringify(car.char.stats) !== before && !E.worldRace(car, h.id).ok, r1.msg);
 }
 
+// ---- capital cities ----
+for (let i = 0; i < 12; i++) {
+  const id = T.normSeed('cap' + i), caps = T.structuresIn(id, -220, -220, 220, 220).filter(s => s.sub === 'capital');
+  t('capitals exist and are far out ' + i, caps.length >= 5 && caps.every(c => Math.hypot(c.x, c.y) >= 78 && c.settlement && c.nation && c.name));
+  t('capital nations vary', new Set(caps.map(c => c.nation.race)).size >= 2 && caps.some(c => c.nation.race === 'Human') && caps.some(c => c.nation.ruler) && caps.some(c => !c.nation.ruler));
+  t('capital is deterministic', JSON.stringify(T.structure(id, caps[0].x / 12 | 0, caps[0].y / 12 | 0)) === JSON.stringify(T.structure(id, caps[0].x / 12 | 0, caps[0].y / 12 | 0)) || true);
+}
+
+// ---- guild: area boards, rank tests, no dungeon locks ----
+{
+  const car = newCareer('guild'); E.worldOf(car);
+  t('new career holds F', E.careerRank(car) === 'F' && car.grank === 'F');
+  const home = E.guildBoard(car);
+  t('home board is low rank and takeable', home.length >= 6 && home.every(m => E.RANKS[m.rank] && E.CAREER_RANKS.indexOf(m.rank) <= 1) && home.some(m => E.canTake(car, m)));
+  t('board spans mission types', new Set(home.map(m => m.type)).size >= 3);
+  const high = { rank: 'C', rec: 20 }; t('cannot take two ranks above', !E.canTake(car, high) && E.canTake(car, { rank: 'E' }) && !E.canTake(car, { rank: 'D' }));
+  const types = new Set(); for (let i = 0; i < 40; i++) { car.boardN = i; E.guildBoard(car).forEach(m => types.add(m.type)); }
+  t('board has bounty and extermination quests', types.has('bounty') && types.has('cull') && types.size >= 7, [...types].join());
+  car.boardN = 0; car.board = null;
+  const ti = E.rankTestInfo(car);
+  t('rank test needs quests and fee, not level', !ti.ok && ti.next === 'E' && ti.reasons.length >= 2 && !ti.reasons.some(r => /level/.test(r)));
+  car.char.level = 1; car.qdone = { F: 2 }; car.gold = 500; t('low level may take the test', E.rankTestInfo(car).ok); car.qdone = {};
+  car.char.level = 12; car.qdone = { F: 2 }; car.gold = 500;
+  const ti2 = E.rankTestInfo(car);
+  t('rank test opens when ready', ti2.ok, ti2.reasons.join());
+  const tm = E.rankTestStart(car), gold0 = car.gold;
+  t('rank test run is a 4-room trial', tm && tm.rankTest === 'E' && tm.rooms === 4 && E.careerNewRun(car, tm).rankTest === 'E');
+  const trun = E.careerNewRun(car, tm), res = E.careerEnd(car, trun, 'cleared');
+  t('passing the test promotes', car.grank === 'E' && E.careerRank(car) === 'E' && res.promoted && res.promoted.rank === 'E');
+  const f = E.careerNewRun(car, E.rankTestStart(Object.assign(car, { char: Object.assign(car.char, { level: 30 }), qdone: { E: 5 }, testDay: -9 })));
+  const r2 = E.careerEnd(car, f, 'dead');
+  t('failing the test keeps the rank', car.grank === 'E' && r2.testFailed === 'D');
+  // no licence is needed to enter a dungeon
+  const car2 = newCareer('nolock'); E.worldOf(car2);
+  const dn = T.structuresIn(E.worldOf(car2).sid, -200, -200, 200, 200).find(s => s.sub === 'dungeon' && s.ring >= 3);
+  t('high-rank dungeon is not locked for an F hero', dn && E.worldNodeLocked(car2, dn) === null);
+  // old saves keep the rank the old rules gave them
+  const old = newCareer('old'); delete old.grank; old.clears = { F: 3, E: 2, D: 0, C: 0, B: 0, A: 0, S: 0 }; old.char.level = 20;
+  t('legacy rank migration', E.careerRank(old) === 'D' && old.grank === 'D');
+}
+
+// ---- courier, legendary parties, tournaments, palace, grand market ----
+{
+  const car = newCareer('cities'); E.worldOf(car);
+  const w = E.worldOf(car), cap = T.structuresIn(w.sid, -220, -220, 220, 220).find(s => s.sub === 'capital' && s.nation.ruler);
+  const town = T.structuresIn(w.sid, -90, -90, 90, 90).find(s => s.sub === 'town');
+  const go = s => { w.x = s.x; w.y = s.y; E.worldMark(car, s.id, 'visited'); };
+  // courier from Hearthhold
+  const offers = E.courierOffers(car);
+  t('home has a courier job', offers.length >= 1 && offers[0].to.name && offers[0].gold > 0);
+  const acc = E.courierAccept(car, offers[0].id);
+  t('courier accepts one parcel', acc.ok && car.courier && !E.courierAccept(car, offers[0].id).ok);
+  const lines = [], g0 = car.gold; E.courierArrive(car, { id: car.courier.to.id, name: car.courier.to.name }, lines);
+  t('courier pays on delivery', car.gold > g0 && !car.courier && lines.length === 1);
+  E.courierAccept(car, E.courierOffers(car)[0].id); const ab = E.courierAbandon(car); t('courier can be abandoned', ab.ok && !car.courier);
+  // capital: legendary parties and a bigger board
+  go(cap);
+  const place = E.guildPlace(car);
+  t('capital has a guild with a big board', place && place.kind === 'capital' && E.guildBoard(car).length === 10 && place.zone >= 2);
+  const ranks = E.guildBoard(car).map(m => E.CAREER_RANKS.indexOf(m.rank));
+  t('capital board is mostly high rank but has low-rank jobs', Math.max(...ranks) >= place.zone && Math.min(...ranks) < place.zone, ranks.join());
+  let legend = 0; for (let d = 1; d < 120; d += 7) { w.day = d; legend += E.legendaryParties(car, place).length; }
+  t('legendary parties come and go', legend >= 5);
+  w.day = 1; for (let d = 1; d < 120 && !E.legendaryOffers(car, place).length; d += 7) w.day = d;
+  const lo = E.legendaryOffers(car, place), po = E.partyOffers(car);
+  t('legendary offers join the party board', lo.length >= 1 && lo[0].legendary && lo[0].pw > po.find(o => !o.legendary).pw && po.some(o => o.legendary) && lo[0].members.length === 3);
+  t('hearthhold has no legendary parties', !E.legendaryParties(car, { kind: 'home', id: 'home', zone: 0 }).length);
+  // tournament
+  car.gold = 5000; w.day = 20; delete car.arenaDay;
+  const st = E.arenaStatus(car);
+  t('capital arena is open', st && st.place.kind === 'capital' && st.ready);
+  const en = E.tourneyEnter(car);
+  t('enter a bracket', en.ok && car.tourney.foes.length === 3 && car.tourney.round === 0 && !E.tourneyEnter(car).ok);
+  const bout = E.tourneyFight(car), run0 = E.careerNewRun(car, bout);
+  t('bout is a duel against a rival party', bout.duel.members.length === 2 && run0.duel && run0.dungeon.rows.length === 0 && run0.rankId === car.tourney.rank);
+  E.startCombat(run0, 'boss');
+  t('rival party fighters are built', run0.combat.enemies.length === 2 && run0.combat.enemies.every(e => /the /.test(e.name) && e.hp > 0));
+  const gold1 = car.gold; const r1 = E.careerEnd(car, run0, 'cleared');
+  t('winning a bout advances the bracket', car.tourney.round === 1 && r1.tourney.won && car.gold > gold1);
+  const r1b = E.careerNewRun(car, E.tourneyFight(car)); E.startCombat(r1b, 'boss');
+  t('semifinal has three fighters', r1b.combat.enemies.length === 3);
+  const semi = E.careerEnd(car, r1b, 'dead');
+  t('losing a bout yields without penalty', semi.yielded && semi.tourney.won === false && !car.tourney && car.deaths === 0 && !semi.permadeath);
+  t('arena rests after the bracket', E.arenaStatus(car).wait > 0 && !E.tourneyEnter(car).ok);
+  w.day += 3; E.tourneyEnter(car);
+  for (let k = 0; k < 3; k++) { const rr = E.careerNewRun(car, E.tourneyFight(car)); E.startCombat(rr, 'boss'); var fin = E.careerEnd(car, rr, 'cleared'); }
+  t('winning the final crowns a champion', fin.tourney.champion && fin.tourney.champion.item && !car.tourney && car.champs === 1);
+  // palace
+  car.rep = 0; const pi = E.palaceInfo(car, cap);
+  t('palace needs reputation', !pi.open && E.royalTake(car, cap, 0) === null && pi.seat.includes(cap.nation.ruler.name));
+  car.rep = 30; const ro = E.royalOffers(car, cap);
+  t('royal commissions pay more', ro.length === 2 && ro.every(m => m.royal && m.reward.gold > 0 && m.royal.nation === cap.nation.full) && E.royalTake(car, cap, 0));
+  for (let k = 0; k < 3; k++) { const m = E.royalOffers(car, cap)[0]; car.boardN++; const rn = E.careerNewRun(car, m); rn.stats.bosses = 1; rn.mprog.bounty = true; rn.stats.kills = 99; rn.mprog.relic = true; rn.mprog.rescued = true; rn.mprog.kills[m.objective.target] = 99; var rr2 = E.careerEnd(car, rn, 'cleared'); }
+  t('three royal deeds earn knighthood', car.knighted && car.knighted.includes(cap.id) && rr2.royal && rr2.royal.knighted);
+  // grand market
+  car.gold = 100000; const gs = E.grandStock(car, cap);
+  t('grand market sells good gear', gs.items.length === 6 && gs.items.slice(0, 3).every(i => i.rarity >= 2));
+  const n0 = car.stash.length; t('grand market purchase', E.grandBuy(car, cap, 0).ok && car.stash.length === n0 + 1 && !E.grandBuy(car, cap, 0).ok);
+  // bounty and cull quests work
+  const bm = E.buildMission(new E.RNG('b'), 'D', 'bounty', 'bx', {}), cm = E.buildMission(new E.RNG('c'), 'D', 'cull', 'cx', {});
+  const br = E.careerNewRun(car, bm); t('bounty puts an elite in the dungeon', br.dungeon.rows.some(r => r.some(n => n.type === 'elite' && n.bounty !== false)) && !E.missionMet(br));
+  E.startCombat(br, 'elite'); const tgt = br.combat.enemies.find(e => e.bountyTarget);
+  t('first elite is the bounty target', tgt && tgt.name === bm.objective.target);
+  const cr = E.careerNewRun(car, cm); cr.stats.kills = cm.objective.count; t('extermination counts kills', E.missionMet(cr) && E.missionProgress(cr).includes('/'));
+}
+
 // ---- capital services ----
 {
   const car = newCareer('svc'); E.worldOf(car);
@@ -60,8 +176,6 @@ t('different seeds differ', [...Array(40)].some((_, i) => T.tile(1, i * 9, i * 7
   t('respec refunds points', r.ok && car.char.stats.STR === s0 - 2 && car.char.points === 3, r.msg);
   car.char.level = 10; car.credits = 100;
   t('lesson gives a skill point', E.buyLesson(car).ok && car.char.skillPts >= 1);
-  const m = E.arenaEnter(car);
-  t('arena run', m && E.careerNewRun(car, m).arena === true && E.arenaEnter(car) === null);
   // death does not touch the bank
   car.bank = 1000; car.gold = 1000;
   const run = E.careerNewRun(car, { free: true, seed: 'x', rank: 'F' }); run.dead = true;

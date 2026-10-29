@@ -43,6 +43,7 @@ function beginCombat(type) {
   run.combat.enemies.forEach(e => { addUnique(S.save.journal.monsters, e.base); if (e.boss) addUnique(S.save.journal.bosses, e.base); });
   S.screen = 'combat'; S.prev = null; S.prevFor = null;
 }
+UI.beginCombat = beginCombat;
 function startRunCommon(run) {
   S.run = run; S.ev = null; S.screen = 'map';
   if (run.dungeon.anomaly) addUnique(S.save.journal.anomalies, run.dungeon.anomaly);
@@ -77,7 +78,7 @@ function endRun(outcome) {
   for (const k of Object.keys(run.mats)) addUnique(j.mats, k);
   if (res.mission && res.mission.done) j.missions++;
   const c = run.char, th = run.dungeon.theme.name;
-  const line = outcome === 'cleared' ? `You defeated ${th}'s guardian with ${run.stats.rooms} rooms cleared.`
+  const line = res.yielded ? `You yielded the bout${res.tourney ? ' against ' + res.tourney.foe : ''} and walk out of the arena unharmed.` : outcome === 'cleared' ? `You defeated ${th}'s guardian with ${run.stats.rooms} rooms cleared.`
     : outcome === 'extracted' ? `You left ${th} after ${run.stats.rooms} room(s) with your loot intact.`
     : career ? (res.permadeath ? `${c.name} fell in ${th}. In hardcore mode, that is the end.` : `You fell in ${th} after ${run.stats.rooms} room(s) and woke up at the Guild, injured.`) : `You fell in ${th} after ${run.stats.rooms} room(s).`;
   const share = `${career ? 'Daily Random Dungeon - Career' : 'Daily Random Dungeon ' + S.date}\n${c.name} the ${c.race} ${c.prof} (${tierOf(c.tier).name}, LUK ${run.d.st.LUK})\n${th} [${run.rankId}]${run.dungeon.anomaly ? ' ' + E.ANOMALIES[run.dungeon.anomaly].name : ''} - ${outcome === 'cleared' ? 'CLEARED' : outcome === 'extracted' ? 'extracted' : 'died'} · rooms ${run.stats.rooms} · heat ${run.heat} · Lv ${c.level}${run.stats.secrets ? ' · secret found' : ''}${res.mission && res.mission.done ? ' · mission complete' : ''}`;
@@ -181,9 +182,11 @@ Object.assign(A, {
   },
   careerhub() { S.tab = 'career'; if (S.save.career) setupHub(); else { S.mode = 'career'; S.screen = 'careerhome'; } },
   embark(d) {
-    const car = S.save.career;
+    const car = S.save.career, m = E.careerBoard(car)[+d.i];
+    if (!m) return;
+    if (!E.canTake(car, m)) { S.msg = E.takeNote(car, m) + '.'; return; }
     S.mode = 'career';
-    startRunCommon(E.careerNewRun(car, E.careerBoard(car)[+d.i]));
+    startRunCommon(E.careerNewRun(car, m));
   },
   freerun(d) {
     const car = S.save.career;
@@ -337,13 +340,57 @@ Object.assign(A, {
 
 // ---------- events ----------
 const app = document.getElementById('app');
+// ---------- touch tooltips ----------
+// Hover text (title="...") never shows on a phone. Press and hold anything that has one, or tap a plain label, to read it.
+(function () {
+  let tip = null, hideT = 0, holdT = 0, swallowUntil = 0, sx = 0, sy = 0;
+  const hide = () => { if (tip) { tip.remove(); tip = null; } clearTimeout(hideT); };
+  function show(el) {
+    const text = el.getAttribute('title');
+    if (!text) return false;
+    hide();
+    tip = document.createElement('div'); tip.id = 'tip'; tip.textContent = text; document.body.appendChild(tip);
+    const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    let x = Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2)), y = r.top - th - 8;
+    if (y < 8) y = Math.min(window.innerHeight - th - 8, r.bottom + 8);
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    hideT = setTimeout(hide, 4200);
+    return true;
+  }
+  const interactive = el => el.matches('button, a, input, select, [data-act]');
+  document.addEventListener('pointerdown', ev => {
+    if (ev.pointerType === 'mouse') return;
+    if (tip) hide();
+    const el = ev.target.closest && ev.target.closest('[title]');
+    clearTimeout(holdT);
+    if (!el) return;
+    sx = ev.clientX; sy = ev.clientY;
+    holdT = setTimeout(() => { if (show(el)) swallowUntil = Date.now() + 800; }, 450);
+  }, true);
+  document.addEventListener('pointermove', ev => { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) clearTimeout(holdT); }, true);
+  for (const e of ['pointerup', 'pointercancel']) document.addEventListener(e, () => clearTimeout(holdT), true);
+  // a plain tap on a non-button label shows its hint straight away
+  document.addEventListener('click', ev => {
+    if (Date.now() < swallowUntil) { ev.stopPropagation(); ev.preventDefault(); return; }
+    const el = ev.target.closest && ev.target.closest('[title]');
+    if (el && !interactive(el) && !el.closest('[data-act]') && window.matchMedia('(hover: none)').matches) show(el);
+  }, true);
+  document.addEventListener('contextmenu', ev => { if (Date.now() < swallowUntil || (ev.target.closest && ev.target.closest('[title]') && window.matchMedia('(hover: none)').matches)) ev.preventDefault(); });
+  // one-time hint on touch devices
+  try {
+    if (window.matchMedia('(hover: none)').matches && !localStorage.getItem('drd_touchhint')) {
+      localStorage.setItem('drd_touchhint', '1');
+      setTimeout(() => { S.msg = 'Touch tip: press and hold any button or label to read its description. On the world map, tap a tile to walk, hold to pin, double-tap a waypoint to travel.'; UI.render(true); }, 800);
+    }
+  } catch (e) { /* storage blocked: skip the hint */ }
+})();
 app.addEventListener('click', ev => {
   const el = ev.target.closest('[data-act]');
   if (!el || el.disabled) return;
   const act = A[el.dataset.act];
   if (!act) return;
   const keep = ['target', 'skill', 'cpotion', 'alloc', 'equip', 'unequip', 'sell', 'potion', 'vpick', 'buy', 'bpotion', 'codex', 'guide', 'vsell', 'usecons', 'learn', 'evolve', 'lo', 'hubtab',
-    'raceboon', 'bankdep', 'bankwd', 'respec', 'lesson', 'mapgo', 'mapstop', 'mappin', 'mappinhere', 'mapunpin', 'mapov', 'settleenter', 'settleleave', 'settletab', 'mapexplore', 'mapwarp', 'mapcopy', 'seedrandom', 'mapscout', 'mapchoose', 'mapdismiss', 'mapreturn', 'townat', 'smithsel', 'upgrade', 'repair', 'repairall', 'enchant', 'craft', 'shopbuy', 'consbuy', 'potbuy', 'credbuy', 'cure', 'bless', 'hire', 'dismiss', 'rumor', 'salvage', 'choose', 'hardcore', 'refreshboard'].includes(el.dataset.act);
+    'raceboon', 'bankdep', 'bankwd', 'respec', 'lesson', 'mapgo', 'mapstop', 'mapstep', 'mappin', 'mappinhere', 'mapunpin', 'mapov', 'settleenter', 'settleleave', 'settletab', 'mapexplore', 'mapwarp', 'mapcopy', 'seedrandom', 'mapscout', 'mapchoose', 'mapdismiss', 'mapreturn', 'townat', 'smithsel', 'upgrade', 'repair', 'repairall', 'enchant', 'craft', 'shopbuy', 'consbuy', 'potbuy', 'credbuy', 'cure', 'bless', 'hire', 'dismiss', 'rumor', 'salvage', 'choose', 'hardcore', 'refreshboard', 'courieraccept', 'courierabandon', 'tourneyjoin', 'tourneyquit', 'grandbuy'].includes(el.dataset.act);
   act(el.dataset, el);
   if (['hub', 'dailyhome', 'careerhome'].includes(S.screen) || ['tab', 'vsell', 'slotswitch'].includes(el.dataset.act)) UI.persist();
   UI.render(keep);

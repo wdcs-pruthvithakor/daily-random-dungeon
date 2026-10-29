@@ -20,7 +20,11 @@ function dangerOf(car, n) {
 }
 
 // ---------- world map (canvas) ----------
-const TS = 22, VW = 45, VH = 25;
+const TS = 22;
+let VW = 45, VH = 25;
+// Fewer tiles on a phone so each one stays big enough to tap.
+function fitView() { const nw = window.innerWidth < 700, w = nw ? 21 : 45, h = nw ? 19 : 25; const ch = w !== VW || h !== VH; VW = w; VH = h; return ch; }
+fitView();
 const Tr = () => E.Terrain;
 const clampv = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rgb = (c, k) => `rgb(${clampv(c[0] * k, 0, 255) | 0},${clampv(c[1] * k, 0, 255) | 0},${clampv(c[2] * k, 0, 255) | 0})`;
@@ -81,6 +85,11 @@ function drawSettlement(g, cx, cy, big, w, n) {
     const col = i % 3, row = (i / 3) | 0, hx = cx - (big ? 54 : 34) + col * (big ? 36 : 24) + (row ? 12 : 0), hy = cy - (big ? 36 : 28) + row * (big ? 32 : 0) + (col % 2) * 3;
     house(hx, hy, walls[(i + n.id.length) % 6], roofs[(i * 2 + n.id.length) % 6], big ? 1 : 0.9);
   }
+  if (n.capital) {
+    g.fillStyle = '#6e6a7c'; g.fillRect(cx - 12, cy - 58, 24, 30); g.fillStyle = '#8a869a'; g.fillRect(cx - 16, cy - 62, 32, 8);
+    for (let k = -1; k <= 1; k++) g.fillRect(cx + k * 12 - 3, cy - 68, 6, 7);
+    g.fillStyle = n.nation.ruler ? '#ffd24a' : '#9ec5ff'; g.fillRect(cx - 3, cy - 48, 6, 10);
+  }
   g.fillStyle = '#c0392b'; g.fillRect(cx + (big ? 44 : 30), cy - (big ? 42 : 30), 4, 16); g.fillStyle = '#ffcb3d'; g.fillRect(cx + (big ? 44 : 30), cy - (big ? 42 : 30), 11, 6);
 }
 UI.drawHero = function (g, ox, oy, car) { return drawHero(g, ox, oy, car); };
@@ -130,7 +139,7 @@ function drawWorld() {
     const px = (n.x - sx) * TS, py = (n.y - sy) * TS;
     if (px < -3 * TS || py < -3 * TS || px > VW * TS + 3 * TS || py > VH * TS + 3 * TS) continue;
     const cx = px + TS / 2, cy = py + TS / 2, seen = n.state === 'seen';
-    if (n.settlement && !seen) { drawSettlement(g, cx, cy, n.sub === 'town', w, n); label(g, n.name, cx, cy + (n.sub === 'town' ? 40 : 31), '#ffe08a'); if (n.waystone) { g.font = '11px sans-serif'; g.fillText('✨', cx + 22, cy - 22); } continue; }
+    if (n.settlement && !seen) { drawSettlement(g, cx, cy, n.sub === 'town' || n.sub === 'capital', w, n); label(g, n.name, cx, cy + (n.sub === 'town' || n.sub === 'capital' ? 40 : 31), n.capital ? '#ffd24a' : '#ffe08a'); if (n.waystone) { g.font = '11px sans-serif'; g.fillText('✨', cx + 22, cy - 22); } continue; }
     const poi = E.WORLD.POI[n.sub];
     const col = seen ? '#8d88b8' : n.kind === 'dungeon' ? (UI.THEME_AURA[n.themeId] || '#ff8a3d') : n.secret ? '#7bf0ff' : '#ffe08a';
     g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(cx, cy + 10, 11, 4, 0, 0, 7); g.fill();
@@ -205,6 +214,7 @@ function updateInfo(car) {
   const tile = S.hoverTile || { x: w.x, y: w.y };
   el.textContent = `${S.hoverTile ? 'Pointing at ' : 'You: '}${describeTile(car, tile.x, tile.y)} · ${clock}, day ${w.day}`;
 }
+UI.stopWalk = (...a) => stopWalk(...a);
 function stopWalk(msg, keepGoal) {
   if (S.walk && S.walk.iv) clearInterval(S.walk.iv);
   if (!keepGoal) S.goal = null;
@@ -268,7 +278,7 @@ function hereCard(car) {
   const poi = E.WORLD.POI[n.sub];
   let body = '', act = '';
   if (n.settlement) {
-    body = `<p class="small">${esc(poi.blurb)}</p><div class="small dim">Services here: ${n.race ? 'inn, healer, market and the elders of the ' + esc(n.race) + '.' : n.sub === 'town' ? 'inn, healer, market, smithy, alchemist, Guild board.' : 'inn, healer, general store.'}</div>`;
+    body = `<p class="small">${esc(poi.blurb)}</p>${n.capital ? UI.capitalBlurb(n) : ''}<div class="small dim">Services here: ${n.capital ? 'inn, healer, Guild hall and rank test, grand arena, ' + (n.nation.ruler ? 'palace' : 'council chamber') + ', grand market, smithy, alchemist, bank, academy, legendary parties.' : n.race ? 'inn, healer, market and the elders of the ' + esc(n.race) + '.' : n.sub === 'town' ? 'inn, healer, market, smithy, alchemist, Guild hall and rank test.' : 'inn, healer, general store.'}</div>`;
     act = `<button class="primary big" data-act="settleenter">${poi.icon} Enter ${esc(n.name)}</button>`;
   } else if (n.kind === 'dungeon') {
     const rk = E.RANKS[n.rank], th = D.THEMES.find(t => t.id === n.themeId), dg = dangerOf(car, n);
@@ -277,8 +287,8 @@ function hereCard(car) {
       <div class="small"><span style="color:${dg[1]}">${dg[0]}</span> <span class="dim">· recommended level ${rk.rec}</span></div>
       ${wd ? `<div class="small" style="color:var(--accent)">${wd.icon} <b>${wd.name} boss:</b> ${esc(wd.desc)}</div>` : ''}
       <div class="small dim">${n.clears ? `Cleared ${n.clears}×. Replays pay normal loot and XP.` : 'First clear: gold, a gear drop, credits, reputation and a big XP bonus.'}</div>
-      ${lock ? `<div class="small" style="color:var(--bad)">🔒 ${esc(lock)}: clear a ${E.CAREER_RANKS[E.CAREER_RANKS.indexOf(n.rank) - 1]}-rank dungeon and reach level ${rk.rec - 3}.</div>` : ''}`;
-    act = lock ? '' : `<button class="primary big" data-act="mapenter" data-id="${n.id}">⚔️ Enter ${esc(n.name)}</button>`;
+      <div class="small dim">Any hero may enter. Rank ${n.rank} only sets the recommended level and the danger.</div>`;
+    act = `<button class="primary big" data-act="mapenter" data-id="${n.id}">⚔️ Enter ${esc(n.name)}</button>`;
   } else {
     const wait = n.cd && w.day < n.cd;
     body = `<p class="small">${esc(poi.blurb)}</p><div class="small dim">${wait ? `Picked clean for now. Returns in ${n.cd - w.day} day(s).` : (n.state === 'visited' ? 'Visited. You may come back for more.' : 'Not yet explored.')}</div>`;
@@ -293,24 +303,33 @@ function nearbyPanel(car) {
   const rows = list.map(n => {
     if (n.state === 'seen') { const d0 = Math.round(Math.hypot(n.x - w.x, n.y - w.y)); return `<div class="item" style="--c:#8d88b8"><div class="slot">❔</div><div class="body"><b>Unexplored place</b><div class="small dim">${d0} tiles · get closer (5 tiles) or scout to learn what it is</div></div><button class="tiny" data-act="mapgo" data-x="${n.x}" data-y="${n.y}">Go</button></div>`; }
     const poi = E.WORLD.POI[n.sub], d = Math.round(Math.hypot(n.x - w.x, n.y - w.y)), dg = dangerOf(car, n);
-    const lock = n.kind === 'dungeon' && E.worldNodeLocked(car, n);
-    return `<div class="item" style="--c:${n.kind === 'dungeon' ? '#ff8a3d' : '#8fd0ff'}"><div class="slot">${poi.icon}</div><div class="body"><b>${esc(n.name)}</b>${n.rank ? ` <span class="tag" style="color:${RANK_COLOR[n.rank]};border-color:${RANK_COLOR[n.rank]}">${n.rank}</span>` : ''}${n.state === 'cleared' ? ' <span class="tag">✔ cleared</span>' : ''}${lock ? ' <span class="tag" style="color:var(--bad)">🔒</span>' : ''}
-      <div class="small dim">${d} tiles · ${esc(Tr().BIOMES[n.biome].name)}${dg ? ` · <span style="color:${dg[1]}">${dg[0]}</span>` : ''}</div></div><button class="tiny" data-act="mapgo" data-x="${n.x}" data-y="${n.y}">Go</button></div>`;
+    const wi = n.waystone ? E.warpInfo(car, n.id) : null, wpoor = wi && car.gold < wi.gold, wpend = w.pending && !w.pending.res;
+    const warp = wi ? `<button class="tiny" data-act="mapwarp" data-id="${esc(n.id)}" ${wpoor || wpend ? 'disabled' : ''} title="Fast travel (${wi.free ? 'free' : wi.gold + 'g'}, ${wi.days} day${wi.days > 1 ? 's' : ''})">🗿 ${wi.free ? 'Travel' : wi.gold + 'g'}</button> ` : '';
+    return `<div class="item" style="--c:${n.kind === 'dungeon' ? '#ff8a3d' : '#8fd0ff'}"><div class="slot">${poi.icon}</div><div class="body"><b>${esc(n.name)}</b>${n.rank ? ` <span class="tag" style="color:${RANK_COLOR[n.rank]};border-color:${RANK_COLOR[n.rank]}">${n.rank}</span>` : ''}${n.state === 'cleared' ? ' <span class="tag">✔ cleared</span>' : ''}
+      <div class="small dim">${d} tiles · ${esc(Tr().BIOMES[n.biome].name)}${dg ? ` · <span style="color:${dg[1]}">${dg[0]}</span>` : ''}</div></div><div class="row">${warp}<button class="tiny" data-act="mapgo" data-x="${n.x}" data-y="${n.y}">Go</button></div></div>`;
   }).join('');
-  const here = E.worldAt(car), inT = E.worldInTown(car), att = E.worldAttuned(car);
-  const canWarp = inT || (here && here.waystone);
-  const warps = att.filter(n => !(n.x === w.x && n.y === w.y)).map(n => `<button class="tiny" data-act="mapwarp" data-id="${n.id}" ${canWarp ? '' : 'disabled'}>🗿 ${esc(n.name)} (1 day)</button>`).join(' ');
-  return `<div class="panel"><h3>🧭 Places nearby</h3>${rows || '<p class="small dim">Nothing spotted yet. Walk out and explore, or scout.</p>'}
-    ${att.length ? `<h3 style="margin-top:10px">Waystones</h3><div class="row" style="flex-wrap:wrap;gap:6px">${inT && w.x === 0 ? '' : `<button class="tiny" data-act="mapwarp" data-id="town" ${canWarp ? '' : 'disabled'}>🏰 Hearthhold (1 day)</button>`} ${warps}</div><p class="small dim">Fast travel only works from town or from an attuned waystone.</p>` : ''}</div>`;
+  return `<div class="panel"><h3>🧭 Places nearby</h3>${rows || '<p class="small dim">Nothing spotted yet. Walk out and explore, or scout.</p>'}</div>`;
 }
 
+// Fast travel to Hearthhold and every attuned waypoint. Free from a waypoint, for gold from the wild.
+function travelPanel(car) {
+  const w = E.worldOf(car), att = E.worldAttuned(car);
+  const list = [{ id: 'town', name: 'Hearthhold', icon: '🏰', x: 0, y: 0 }].concat(att.map(n => ({ id: n.id, name: n.name, icon: n.settlement ? E.WORLD.POI[n.sub].icon : '🗿', x: n.x, y: n.y })));
+  const rows = list.map(n => ({ n, i: E.warpInfo(car, n.id) })).filter(r => r.i && r.i.dist >= 0.5).sort((a, b) => a.i.dist - b.i.dist).map(({ n, i }) => {
+    const pend = w.pending && !w.pending.res, poor = car.gold < i.gold;
+    const cost = i.free ? `${i.days} day` : `${i.gold}g · ${i.days} days`;
+    return `<div class="item" style="--c:#7bf0ff"><div class="slot">${n.icon}</div><div class="body"><b>${esc(n.name)}</b> <span class="tag" style="color:${RANK_COLOR[E.CAREER_RANKS[E.worldZone(n.x, n.y)]]}">${E.CAREER_RANKS[E.worldZone(n.x, n.y)]}</span><div class="small dim">${Math.round(i.dist)} tiles away</div></div><button class="tiny" data-act="mapwarp" data-id="${esc(n.id)}" ${pend || poor ? 'disabled' : ''} title="${poor ? 'Not enough gold' : ''}">Travel · ${cost}</button></div>`;
+  }).join('');
+  const free = E.warpInfo(car, 'town').free;
+  return `<div class="panel"><h3>🗿 Fast travel</h3><p class="small dim">${free ? 'You are at a waypoint: travel is free and takes a day.' : 'You are in the wild: recalling costs gold and two days. Walk to a waystone or settlement to travel free.'} Waystones and any settlement you have visited are waypoints. Double-click a waypoint on the map, or press <kbd>H</kbd> to go home.</p>${rows || '<p class="small dim">No other waypoints yet. Attune waystones and visit villages and towns.</p>'}</div>`;
+}
 function settlementView(car, n) {
   const P = UI.hubParts, tp = P.townPanels(car), poi = E.WORLD.POI[n.sub];
-  const tabs = n.race ? [['inn', '🍺 Inn'], ['market', '🏪 Market'], ['elders', '🧓 Elders']] : n.sub === 'town' ? [['inn', '🍺 Inn'], ['market', '🏪 Market'], ['smith', '⚒️ Smithy'], ['alchemy', '⚗️ Alchemist'], ['board', '📜 Guild board']] : [['inn', '🍺 Inn'], ['market', '🏪 General store']];
+  const tabs = n.capital ? [['inn', '🍺 Inn'], ['board', '📜 Guild'], ['arena', '🎯 Arena'], ['palace', n.nation.ruler ? '🏰 Palace' : '🏛️ Council'], ['grand', '💎 Grand market'], ['market', '🏪 Store'], ['smith', '⚒️ Smithy'], ['alchemy', '⚗️ Alchemist'], ['bank', '🏦 Bank'], ['academy', '🎓 Academy']] : n.race ? [['inn', '🍺 Inn'], ['market', '🏪 Market'], ['elders', '🧓 Elders']] : n.sub === 'town' ? [['inn', '🍺 Inn'], ['market', '🏪 Market'], ['smith', '⚒️ Smithy'], ['alchemy', '⚗️ Alchemist'], ['board', '📜 Guild board']] : [['inn', '🍺 Inn'], ['market', '🏪 General store']];
   const t = tabs.some(x => x[0] === S.settleTab) ? S.settleTab : 'inn';
-  const body = { inn: () => tp.tavern + tp.healer, elders: () => racePanel(car, n), market: () => P.hubMarket(car), smith: () => P.hubSmith(car), alchemy: () => P.hubAlchemy(car), board: () => P.hubBoard(car) }[t]();
+  const body = { inn: () => tp.tavern + tp.healer, elders: () => racePanel(car, n), market: () => P.hubMarket(car), smith: () => P.hubSmith(car), alchemy: () => P.hubAlchemy(car), board: () => P.hubBoard(car), arena: () => UI.arenaPanel(car), palace: () => UI.palacePanel(car, n), grand: () => UI.grandPanel(car, n), bank: () => bankPanel(car), academy: () => academyPanel(car) }[t]();
   const nav = `<div class="subtabs">${tabs.map(([id, nm]) => `<button class="${t === id ? 'on' : ''}" data-act="settletab" data-sub="${id}">${nm}</button>`).join('')}</div>`;
-  return `<div class="scene th-none motes"><div class="row between"><div><div style="font:700 22px var(--serif)">${poi.icon} ${esc(n.name)}</div><div class="small dim">${esc(poi.blurb)} A waypoint: fast-travel here from town or any other waypoint.</div></div><button data-act="settleleave">← Back to the map</button></div></div>${nav}${body}`;
+  return `<div class="scene th-none motes"><div class="row between"><div><div style="font:700 22px var(--serif)">${poi.icon} ${esc(n.name)}</div><div class="small dim">${esc(poi.blurb)} A waypoint: fast-travel here from town or any other waypoint.${n.capital ? ' ' + esc(n.nation.full) + '.' : ''}</div></div><button data-act="settleleave">← Back to the map</button></div></div>${nav}${body}`;
 }
 function racePanel(car, n) {
   const b = E.raceBoon(car, n), r = b.raceInfo, mine = car.char.race === n.race;
@@ -333,6 +352,7 @@ function overviewPanel() {
   return `<div class="panel"><h3>🗺️ Overview (explored land)</h3><canvas id="overviewcv" class="overview" width="500" height="500"></canvas><div class="small dim">Click an explored spot to travel there. Gold squares are settlements, cyan are waypoints, red flags are your markers, orange dots are dungeons.</div></div>`;
 }
 UI.hubMap = function (car) {
+  fitView();
   const w = E.worldOf(car);
   if (S.settle) {
     const here = E.worldAt(car);
@@ -345,10 +365,11 @@ UI.hubMap = function (car) {
   const status = `<div class="panel mapbar"><div class="row between">
     <div class="small"><b>Day ${w.day}</b> · Zone <b style="color:${RANK_COLOR[E.CAREER_RANKS[z]]}">${E.CAREER_RANKS[z]}</b> · ${seeds} <button class="tiny" data-act="mapcopy" title="Copy the world seed">Copy seed</button></div>
     <div class="row"><button data-act="mapscout" ${pending ? 'disabled' : ''} title="Spend a day to survey the land and find hidden places">🔭 Scout (1 day)</button><button data-act="mappinhere" title="Drop a marker here">📍 Pin</button>${E.worldInTown(car) ? '<button data-act="hubtab" data-sub="town">🏰 Enter town</button>' : `<button data-act="mapreturn" ${pending ? 'disabled' : ''}>🏠 Return home</button>`}</div></div>
-    <div class="small dim" style="margin-top:4px">Walk with <b>WASD / arrow keys</b> or <b>click a tile</b> to auto-walk. Dark areas are unexplored. Danger grows with distance from Hearthhold (zones F to S). Every new place gives XP.</div></div>`;
+    <div class="small dim" style="margin-top:4px">Walk with <b>WASD / arrow keys</b>, the on-screen arrows, or <b>tap a tile</b> to auto-walk. Press and hold a tile to pin it; double-tap a waypoint to fast-travel there. Dark areas are unexplored. Danger grows with distance from Hearthhold (zones F to S). Every new place gives XP.</div></div>`;
   return `${status}${encounterPanel(car)}<div class="mapwrap"><canvas id="worldcv" width="${VW * TS}" height="${VH * TS}"></canvas><div id="mapinfo" class="mapinfo"></div></div>
+    <div class="dpad"><button class="u" data-act="mapstep" data-dx="0" data-dy="-1" aria-label="North">▲</button><button class="l" data-act="mapstep" data-dx="-1" data-dy="0" aria-label="West">◀</button><button class="c" data-act="mapstep" data-dx="0" data-dy="0" aria-label="Stop">■</button><button class="r" data-act="mapstep" data-dx="1" data-dy="0" aria-label="East">▶</button><button class="d" data-act="mapstep" data-dx="0" data-dy="1" aria-label="South">▼</button></div>
     <div class="grid g2">${hereCard(car) || '<div class="panel"><h3>🧭 On the road</h3><p class="small dim">Nothing here but open land. Click anywhere explored to walk there.</p></div>'}${nearbyPanel(car)}</div>
-    <div class="grid g2">${markersPanel(car)}${overviewPanel()}</div>`;
+    <div class="grid g2">${travelPanel(car)}${markersPanel(car)}</div>${overviewPanel()}`;
 };
 
 // ---------- town ----------
@@ -381,12 +402,7 @@ function academyPanel(car) {
     <div class="item" style="--c:#ffe08a"><div class="slot">📖</div><div class="body"><b>Buy a lesson</b><div class="small dim">+1 skill point for ${lc} Guild Credits. You can learn ${cap - got} more lesson${cap - got === 1 ? '' : 's'} at your level (1 per 5 levels).</div></div><button class="tiny" data-act="lesson" ${got < cap && car.credits >= lc ? '' : 'disabled'}>${lc} cr</button></div>
     <p class="small dim">Credits: <b>${car.credits}</b></p></div>`;
 }
-function arenaPanel(car) {
-  const ok = E.arenaReady(car), rk = E.careerRank(car), w = E.worldOf(car);
-  const wait = car.arenaDay != null ? Math.max(0, 2 - (w.day - car.arenaDay)) : 0;
-  return `<div class="panel"><h3>🎯 Arena</h3><p class="small dim">Fight a five-chamber gauntlet in the stone halls under the arena. Only a clear pays out: gold, Guild Credits and reputation. Enemies match your Guild rank (<b>${rk}</b>). Dying here costs what dying anywhere costs.</p>
-    <button class="primary big" data-act="arenago" ${ok ? '' : 'disabled'}>🎯 Enter the arena${ok ? '' : ` (back in ${wait} day${wait === 1 ? '' : 's'})`}</button></div>`;
-}
+function arenaPanel(car) { return UI.arenaPanel(car); }
 UI.hubTownView = function (car) {
   const w = E.worldOf(car), P = UI.hubParts;
   const home = E.worldInTown(car);
@@ -401,7 +417,7 @@ UI.hubTownView = function (car) {
       healer: () => tp.healer, tavern: () => tp.tavern, home: () => P.hubHero(car), store: () => P.hubBag(car), bank: () => bankPanel(car), academy: () => academyPanel(car), arena: () => arenaPanel(car),
     }[at]();
     panel = `<div class="panel"><div class="row between"><h3>${TOWN_B[at].name}</h3><button class="tiny" data-act="townat" data-b="">← Back to the square</button></div></div>${body}`;
-  } else panel = `<div class="panel"><h3>Hearthhold</h3><p class="small dim">${clock}, day ${w.day}. Tap a building to go inside. The Guild Hall holds the mission board; the market and smithy keep your gear in shape; the temple heals injuries; the tavern hires companions.</p></div>`;
+  } else panel = `<div class="panel"><h3>Hearthhold</h3><p class="small dim">${clock}, day ${w.day}. Tap a building to go inside. Hearthhold is your home city, not a capital. The Guild Hall holds the mission board; the market and smithy keep your gear in shape; the temple heals injuries; the tavern hires companions. The great capitals lie far out in dangerous lands.</p></div>`;
   return `<div class="townwrap ${home ? '' : 'away'}">${UI.townCanvas()}${home ? '' : '<div class="awaylabel">You are away from town</div>'}</div>${panel}`;
 };
 function awayPanel(car) {
@@ -456,7 +472,6 @@ Object.assign(A, {
     const car = S.save.career;
     const m = E.worldEnter(car, d.id);
     if (!m) { S.msg = 'You cannot enter that from here.'; return; }
-    if (E.worldNodeLocked(car, E.worldNode(car, d.id))) { S.msg = 'You lack the Guild licence for this rank.'; return; }
     stopWalk();
     S.mode = 'career';
     UI.startRun(E.careerNewRun(car, m));
@@ -466,11 +481,6 @@ Object.assign(A, {
   bankwd(d) { const car = S.save.career; const r = E.bankWithdraw(car, d.n === 'all' ? (car.bank || 0) : +d.n); hubFresh(); after(r); },
   respec() { const car = S.save.career; const r = E.respec(car); hubFresh(); after(r); },
   lesson() { const car = S.save.career; const r = E.buyLesson(car); hubFresh(); after(r); },
-  arenago() {
-    const car = S.save.career, m = E.arenaEnter(car);
-    if (!m) { S.msg = 'The arena is resting. Come back in a day or two.'; return; }
-    stopWalk(); S.mode = 'career'; UI.persist(); UI.startRun(E.careerNewRun(car, m));
-  },
 });
 
 // ---------- canvas lifecycle ----------
@@ -484,8 +494,26 @@ function bindCanvas() {
   };
   cv.addEventListener('mousemove', ev => { S.hoverTile = tileAt(ev); updateInfo(S.save.career); });
   cv.addEventListener('mouseleave', () => { S.hoverTile = null; });
-  cv.addEventListener('contextmenu', ev => { ev.preventDefault(); const t = tileAt(ev); A.mappin({ x: t.x, y: t.y }); drawWorld(); UI.render(true); });
+  // touch: tapping shows what is there, holding pins the tile (the touch version of right-click)
+  let lpTimer = 0, lpFired = 0, touchAt = 0, sx0 = 0, sy0 = 0;
+  cv.addEventListener('pointerdown', ev => {
+    if (ev.pointerType === 'mouse') return;
+    touchAt = Date.now(); sx0 = ev.clientX; sy0 = ev.clientY;
+    S.hoverTile = tileAt(ev); updateInfo(S.save.career);
+    clearTimeout(lpTimer);
+    lpTimer = setTimeout(() => { lpFired = Date.now(); const t = tileAt({ clientX: sx0, clientY: sy0 }); A.mappin({ x: t.x, y: t.y }); drawWorld(); UI.render(true); }, 650);
+  });
+  cv.addEventListener('pointermove', ev => { if (ev.pointerType !== 'mouse' && Math.hypot(ev.clientX - sx0, ev.clientY - sy0) > 10) clearTimeout(lpTimer); });
+  for (const e of ['pointerup', 'pointercancel']) cv.addEventListener(e, () => clearTimeout(lpTimer));
+  cv.addEventListener('dblclick', ev => {   // double-click a waypoint to fast travel to it
+    const t = tileAt(ev), car = S.save.career;
+    const wp = t.x === 0 && t.y === 0 ? { id: 'town' } : E.worldAttuned(car).find(n => n.x === t.x && n.y === t.y);
+    if (!wp) return;
+    stopWalk(); const r = E.worldWarp(car, wp.id); hubFresh(); after(r); UI.render(true);
+  });
+  cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (Date.now() - touchAt < 2000) return; const t = tileAt(ev); A.mappin({ x: t.x, y: t.y }); drawWorld(); UI.render(true); });
   cv.addEventListener('click', ev => {
+    if (Date.now() - lpFired < 900) return;
     const t = tileAt(ev), car = S.save.career, w = E.worldOf(car);
     if (S.walk) { stopWalk(); drawWorld(); return; }
     if (!E.worldIsExplored(w, t.x, t.y)) { S.msg = 'Unexplored. Walk closer or scout first.'; UI.render(true); return; }
@@ -557,15 +585,26 @@ window.addEventListener('keydown', ev => {
 }, true);
 window.addEventListener('keydown', ev => {
   if (S.tab !== 'career' || S.screen !== 'hub' || S.hubTab !== 'map' || !document.getElementById('worldcv')) return;
-  if (/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target.tagName || ''))) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target.tagName || '')) || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key === 'h' || ev.key === 'H') {   // H: fast travel home, only when it is free
+    const car = S.save.career, w = E.worldOf(car), i = E.warpInfo(car, 'town');
+    if (i && i.free && i.dist >= 0.5 && !(w.pending && !w.pending.res)) { ev.preventDefault(); stopWalk(); const r = E.worldWarp(car, 'town'); hubFresh(); after(r); UI.render(true); }
+    return;
+  }
   const dir = { ArrowUp: [0, -1], w: [0, -1], W: [0, -1], ArrowDown: [0, 1], s: [0, 1], S: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0], ArrowRight: [1, 0], d: [1, 0], D: [1, 0] }[ev.key];
   if (!dir) return;
   ev.preventDefault();
+  stepBy(dir[0], dir[1]);
+});
+function stepBy(dx, dy) {
   stopWalk();
-  const car = S.save.career, r = E.worldStep(car, dir[0], dir[1]);
+  const car = S.save.career, r = E.worldStep(car, dx, dy);
   if (!r.ok) { S.msg = r.msg; drawWorld(); return; }
   if (r.msg) S.msg = r.msg;
   if (r.arrived || r.pending) { hubFresh(); UI.persist(); UI.render(true); return; }
   drawWorld(); S.keySteps = (S.keySteps || 0) + 1; if (S.keySteps % 10 === 0) UI.persist();
-});
+}
+A.mapstep = d => { const dx = +d.dx, dy = +d.dy; if (!dx && !dy) { stopWalk(); return; } stepBy(dx, dy); };
+let rsz = 0;
+window.addEventListener('resize', () => { clearTimeout(rsz); rsz = setTimeout(() => { if (document.getElementById('worldcv') && fitView()) UI.render(true); }, 200); });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

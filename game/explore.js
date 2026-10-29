@@ -19,6 +19,7 @@ const POI = {
   vault: { name: 'Hidden Vault', icon: '💎', blurb: 'Nobody was meant to find this.', secret: true },
   racehold: { name: 'Homeland', icon: '🛖', blurb: 'The home of a people. An inn, a market, and elders who may honour you.', settlement: true },
   village: { name: 'Village', icon: '🏘️', blurb: 'An inn, a general store and a waystone. A safe place to rest.', settlement: true },
+  capital: { name: 'Capital City', icon: '👑', blurb: 'The seat of a nation: great guild hall, arena, grand market and a seat of power. The best adventurers gather here.', settlement: true },
   town: { name: 'Town', icon: '🏙️', blurb: 'An inn, market, smithy, alchemist and a waystone.', settlement: true },
   dungeon: { name: 'Dungeon', icon: '🏰', blurb: 'A full dungeon with a guardian.', dungeon: true },
 };
@@ -304,6 +305,7 @@ function arrive(career, node, lines) {
   if (node.settlement) {
     raise(node, 'visited');
     const fresh = !node.waystone; node.waystone = true;
+    if (E.courierArrive) E.courierArrive(career, node, lines);
     if (first) discover();
     if (fresh) lines.push(`${node.name} is now a waypoint: you can fast-travel here.`);
     commit(career, node);
@@ -469,28 +471,35 @@ function worldReturn(career) {
   w.pending = null; tickDays(career, days); w.x = 0; w.y = 0; markView(w, 0, 0, sightOf(career));
   return { ok: true, msg: warp ? 'The waystone carries you home in a day.' : `You walk home. ${days} day${days > 1 ? 's' : ''} pass.` };
 }
+// Fast travel is free (one day) from town or any attuned waypoint. From the open wild you can still recall to a waypoint, for gold and two days.
+function warpInfo(career, id) {
+  const w = worldOf(career), here = atNode(career);
+  const free = inTown(w) || !!(here && here.waystone);
+  let tx = 0, ty = 0;
+  if (id !== 'town') { const n = attuned(career).find(a => a.id === id); if (!n) return null; tx = n.x; ty = n.y; }
+  const dist = Math.hypot(tx - w.x, ty - w.y);
+  return { x: tx, y: ty, dist, free, gold: free ? 0 : Math.round(30 + dist * 0.8), days: free ? 1 : 2 };
+}
 function worldWarp(career, id) {
   const w = worldOf(career);
   if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
-  const here = atNode(career);
-  if (!(inTown(w) || (here && here.waystone))) return { ok: false, msg: 'You must be in town or at an attuned waystone.' };
-  if (id === 'town') { w.x = 0; w.y = 0; } else {
-    const n = nodeOf(career, id);
-    if (!n || !n.waystone) return { ok: false, msg: 'That waystone is not attuned.' };
-    w.x = n.x; w.y = n.y;
-  }
-  w.pending = null; tickDays(career, 1); markView(w, w.x, w.y, sightOf(career));
-  return { ok: true, msg: 'The waystone hums. A day later you step out elsewhere.' };
+  const info = warpInfo(career, id);
+  if (!info) return { ok: false, msg: 'That waypoint is not attuned.' };
+  if (info.dist < 0.5) return { ok: false, msg: 'You are already there.' };
+  if (career.gold < info.gold) return { ok: false, msg: `Recalling from the wild costs ${info.gold} gold.` };
+  career.gold -= info.gold;
+  w.x = info.x; w.y = info.y;
+  w.pending = null; tickDays(career, info.days); markView(w, w.x, w.y, sightOf(career));
+  return { ok: true, msg: info.free ? 'The waystone hums. A day later you step out elsewhere.' : `You pay ${info.gold} gold for a recall. Two days later you arrive.` };
 }
 function worldEnter(career, id) {
   const w = worldOf(career), node = nodeOf(career, id);
   if (!node || !node.rank || node.x !== w.x || node.y !== w.y) return null;
   return { free: true, seed: `w|${w.seed}|${id}|${node.clears || 0}|${career.runs}`, rank: node.rank, themeId: node.themeId, nodeId: id, rooms: node.rooms || 0, warden: node.warden || null, nodeName: node.name };
 }
-function nodeLocked(career, node) {
-  if (!node.rank) return null;
-  return E.careerUnlocked(career, node.rank) ? null : `Needs the ${node.rank} licence`;
-}
+// Any hero may enter any dungeon: rank only sets the recommendation and the danger rating.
+function nodeLocked() { return null; }
+function worldMark(career, id, st) { const w = worldOf(career), n = T.structById(w.sid, id); if (n) upgrade(w, n, st); }
 
 // ---------- after a dungeon ----------
 function worldAfterRun(career, run, outcome, res) {
@@ -522,12 +531,19 @@ function worldAfterRun(career, run, outcome, res) {
       res.firstClear = { name: node.name, gold: g, credits: 3 + ring * 2, rep: 3 + ring, item: it };
     }
   }
-  // the hero always comes home after a delve
-  const far = Math.hypot(w.x, w.y);
-  const days = Math.max(1, Math.min(3, Math.ceil(far / 18)));
-  tickDays(career, days); w.x = 0; w.y = 0; w.pending = null;
-  markView(w, 0, 0, sightOf(career));
-  res.homeDays = days;
+  // a fallen hero wakes up at the Guild; anyone else stays where the dungeon is, and the delve costs a day
+  w.pending = null;
+  if (outcome === 'dead') {
+    const far = Math.hypot(w.x, w.y);
+    const days = Math.max(1, Math.min(3, Math.ceil(far / 18)));
+    tickDays(career, days); w.x = 0; w.y = 0;
+    markView(w, 0, 0, sightOf(career));
+    res.homeDays = days;
+  } else {
+    tickDays(career, 1);
+    markView(w, w.x, w.y, sightOf(career));
+    res.stayed = true;
+  }
 }
 
 // ---------- capital services ----------
@@ -589,15 +605,7 @@ function buyLesson(career) {
   career.credits -= cost; career.lessons = (career.lessons || 0) + 1; career.char.skillPts += 1;
   return { ok: true, msg: 'The masters teach you something new. +1 skill point.' };
 }
-function arenaEnter(career) {
-  const w = worldOf(career);
-  if (career.arenaDay != null && w.day - career.arenaDay < 2) return null;
-  career.arenaDay = w.day;
-  return { free: true, arena: true, seed: `arena|${career.char.name}|${career.runs}|${w.day}`, rank: E.careerRank(career), themeId: 'fortress', rooms: 5 };
-}
-const arenaReady = career => career.arenaDay == null || worldOf(career).day - career.arenaDay >= 2;
-
-Object.assign(E, { partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, arenaEnter, arenaReady, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
+Object.assign(E, { warpInfo, partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, worldMark, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
   worldKnown: knownNodes, worldNear: structsNear, worldAttuned: attuned, worldIsExplored: isEx, worldSight: sightOf, worldZone: zoneAt, randomSeedText,
   WORLD: { POI, SIGHT, ROAD }, nodeRank });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

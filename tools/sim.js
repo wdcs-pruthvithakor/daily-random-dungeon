@@ -157,7 +157,13 @@ function careerSim() {
       for (const inj of (career.char.injuries || []).slice()) E.cureInjury(career, inj.id);
       const board = E.careerBoard(career);
       const lvl = career.char.level;
-      const ok = board.filter(m => m.rec <= lvl + 1);
+      const ti = E.rankTestInfo(career);
+      if (!ti.max && ti.ok && lvl >= ti.need && n % 2 === 0) {
+        const tm = E.rankTestStart(career), trun = E.careerNewRun(career, tm), tres = playRun(trun);
+        E.careerEnd(career, trun, tres.win ? 'cleared' : 'dead');
+        continue;
+      }
+      const ok = board.filter(m => m.rec <= lvl + 1 && E.canTake(career, m));
       const mission = process.env.RP ? board[Math.floor(rngc.next() * board.length)]
         : ((ok.sort((a, b) => b.rec - a.rec || (a.type === 'clear' ? -1 : 1))[0]) || board.slice().sort((a, b) => a.rec - b.rec)[0]);
       const run = E.careerNewRun(career, mission);

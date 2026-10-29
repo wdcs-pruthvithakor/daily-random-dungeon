@@ -36,7 +36,7 @@ const BUILDINGS = [
   { key: 'market', name: 'Market', x: 1, y: 9, rows: HOUSE.brownRed, tip: 'General store, armory, tomes' },
   { key: 'smith', name: 'Smithy', x: 5, y: 9, rows: HOUSE.stoneBlue2, tip: 'Upgrade, repair, enchant' },
   { key: 'alchemy', name: 'Alchemist', x: 9, y: 9, rows: HOUSE.stoneRed, tip: 'Craft potions and bombs' },
-  { key: 'arena', name: 'Arena', x: 19, y: 9, rows: HOUSE.stoneBlue, tip: 'Gauntlet for gold, credits and fame' },
+  { key: 'arena', name: 'Arena', x: 19, y: 9, rows: HOUSE.stoneBlue, tip: 'Tournaments against rival parties' },
 ];
 const GATE = { key: 'gate', name: 'City Gate', x: 13, y: 15, rows: [[99, 100, 100, 101], [111, 112, 113, 114], [123, 124, 125, 126]], tip: 'Leave for the open world' };
 const ALL = BUILDINGS.concat([GATE]);
@@ -155,7 +155,7 @@ function draw() {
   else if (dusk) { g.fillStyle = 'rgba(255,120,50,.14)'; g.fillRect(0, 0, cv.width, cv.height); }
   else if ((w.day % 8) === 0) { g.fillStyle = 'rgba(255,200,150,.1)'; g.fillRect(0, 0, cv.width, cv.height); }
   const info = document.getElementById('towninfo');
-  if (info) info.textContent = hover ? `${hover.name}: ${hover.tip}` : 'Hearthhold, capital of the realm. Tap a building to go inside.';
+  if (info) info.textContent = hover ? `${hover.name}: ${hover.tip}` : 'Hearthhold, your home city. Tap a building to go inside.';
   return true;
 }
 function hit(ev, cv) {

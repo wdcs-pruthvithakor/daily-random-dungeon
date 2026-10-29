@@ -40,7 +40,7 @@ Tabs: Home, Daily, Career, Codex, Vault, Guide. A run in progress keeps its tab 
 A persistent character: roll three level-1 adventurers (free rerolls while starting), pick one, then climb Guild ranks F, E, D, C, B, A, S. Optional hardcore: death is permanent and the character goes to the Hall of the Fallen.
 
 - **XP:** `30 * level^2.2` per level (level 30: ~53k, level 49: ~157k, cap 50). Dungeons more than 5 levels under you pay up to 80% less XP.
-- **Promotion** to rank R needs a clear of the previous rank and level at least (recommended level - 3).
+- **Promotion** to rank R needs two finished quests (no minimum level), and passing the rank test (a four-room dungeon of rank R). Quests on a board are limited to one rank above yours; dungeons are open to all and only show a recommended level and danger.
 - **Mission board:** six seeded contracts per visit (refresh 40g): Dungeon Clear, Monster Hunt, Resource Gathering, Exploration, Rescue, Relic Recovery, plus rare Emergency missions. Each has an objective, an optional bonus objective, and pays gold, Guild Credits, reputation and a gear reward. Free expeditions are also available.
 - **Guild reputation** gives titles (Unknown to Legendary) and up to 15% off all prices. Failing or abandoning missions costs reputation.
 - **Services:** General Store, rotating Armory, Guild credit shop (tomes), Blacksmith (upgrade to +5 with failure chance, repair, enchant, salvage), Alchemy bench (11 recipes), Healer (injuries, blessing), Tavern (hire companions, rumors that reveal anomalies), stash of 40.

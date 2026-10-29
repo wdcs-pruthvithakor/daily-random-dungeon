@@ -34,4 +34,4 @@ Saves use `localStorage` key `drd_save_v2` (a v1 save is partly imported).
 - Every stat now has an effect for every class.
 - In-game Guide with ten sections.
 
-- First-person 3D dungeons, a pixel-art capital with Bank, Academy and Arena, racial homelands, CC0 Kenney art (see `game/assets/CREDITS.txt`).
+- First-person 3D dungeons, a pixel-art home city (Hearthhold) with Bank, Academy and Arena, random capital cities with palaces, guild rank tests, party tournaments, racial homelands, CC0 Kenney art (see `game/assets/CREDITS.txt`).

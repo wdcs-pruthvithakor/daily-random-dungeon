@@ -374,6 +374,17 @@ const MISSION_TYPES = {
   explore: { name: 'Exploration', icon: '🧭', weight: 15, mult: 0.85 },
   rescue: { name: 'Rescue', icon: '🆘', weight: 10, mult: 1.2 },
   relic: { name: 'Relic Recovery', icon: '🏺', weight: 10, mult: 1.25 },
+  bounty: { name: 'Bounty', icon: '🗡️', weight: 12, mult: 1.35 },
+  cull: { name: 'Extermination', icon: '🪓', weight: 10, mult: 0.95 },
+};
+// Fighters in a rival party (arena tournaments). Names and counts come from the bracket.
+const DUEL_ROLES = {
+  duelist: { key: 'duelist', name: 'Duelist', glyph: '🤺', hp: 24, atk: 6.5, def: 3, xp: 12, gold: [6, 12], intents: { attack: 50, heavy: 25, guard: 25 }, drops: [] },
+  archer: { key: 'archer', name: 'Archer', glyph: '🏹', hp: 16, atk: 7, def: 1, xp: 12, gold: [6, 12], intents: { flurry: 50, attack: 50 }, drops: [] },
+  mage: { key: 'mage', name: 'Battle Mage', glyph: '🧙', hp: 15, atk: 7, def: 1, xp: 13, gold: [6, 12], intents: { burn: 40, curse: 25, attack: 35 }, drops: [] },
+  knight: { key: 'knight', name: 'Shieldbearer', glyph: '🛡️', hp: 30, atk: 5.5, def: 5, xp: 12, gold: [6, 12], intents: { attack: 40, guard: 30, stagger: 30 }, drops: [] },
+  cleric: { key: 'cleric', name: 'Cleric', glyph: '✝️', hp: 18, atk: 5, def: 2, xp: 11, gold: [6, 12], intents: { attack: 40, shield: 40, curse: 20 }, drops: [] },
+  berserker: { key: 'berserker', name: 'Berserker', glyph: '🪓', hp: 28, atk: 8, def: 2, xp: 13, gold: [6, 12], intents: { heavy: 40, slam: 30, attack: 30 }, drops: [] },
 };
 const OPTIONALS = {
   nopotion: { label: 'Use no healing potions', bonus: 0.4 },
@@ -515,7 +526,7 @@ const EVENTS = [
       { label: 'Look away', out: { text: 'You turn your back.' } }] },
 ];
 
-const api = { SKILLS, KIND_SKILL_LIST, BOOK_SKILLS, MATERIALS, CONSUMABLES, SLOTS, SLOT_NAMES, SLOT_WEIGHT, BASES, START_WEAPON, AFFIXES, MONSTERS, THEMES, ANOMALIES, INJURIES, COMPANIONS, RECIPES, MISSION_TYPES, OPTIONALS, RELIC_NAMES, REP_TITLES, CAMP_LORE, RUMORS, EVENTS };
+const api = { SKILLS, KIND_SKILL_LIST, BOOK_SKILLS, MATERIALS, CONSUMABLES, SLOTS, SLOT_NAMES, SLOT_WEIGHT, BASES, START_WEAPON, AFFIXES, MONSTERS, THEMES, ANOMALIES, INJURIES, COMPANIONS, RECIPES, MISSION_TYPES, DUEL_ROLES, OPTIONALS, RELIC_NAMES, REP_TITLES, CAMP_LORE, RUMORS, EVENTS };
 root.DATA = api;
 if (typeof module !== 'undefined') module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

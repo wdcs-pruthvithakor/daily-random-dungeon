@@ -88,7 +88,18 @@ function wardenTick(run, e) {
     if (run.rng.chance(run.d.wilRes)) say(run, 'You throw off the hex.'); else { run.weak = Math.max(run.weak, 2); say(run, `${e.name} hexes you.`); }
   }
 }
+function duelParty(run) {
+  const d = run.duel, out = [];
+  for (const m of d.members) {
+    const e = makeEnemy(D.DUEL_ROLES[m.role], run, { hpMult: (d.hpMult || 1) * (d.legendary ? 1.3 : 1) });
+    e.name = `${m.name} the ${D.DUEL_ROLES[m.role].name}`; e.drops = [];
+    if (d.legendary) { e.atk = Math.round(e.atk * 1.15 * 10) / 10; e.xp *= 1.6; e.gold *= 1.6; }
+    out.push(e);
+  }
+  return out;
+}
 function buildEncounter(run, type) {
+  if (run.duel && type === 'boss') return duelParty(run);
   const th = run.dungeon.theme, rng = run.rng;
   const tpls = th.pool.map(k => D.MONSTERS[k]);
   if (type === 'boss') {
@@ -108,6 +119,11 @@ function buildEncounter(run, type) {
     const m = [rng.pick(mutKeys)];
     if (run.heat >= 4 && rng.chance(0.35)) { const m2 = rng.pick(mutKeys); if (!m.includes(m2)) m.push(m2); }
     const out = [makeEnemy(rng.pick(tpls), run, { elite: true, muts: m })];
+    const ob0 = run.mission && run.mission.objective;
+    if (ob0 && ob0.kind === 'bounty' && type === 'elite' && !run.mprog.bountySeen) {
+      run.mprog.bountySeen = true;
+      const b = out[0]; b.bountyTarget = true; b.name = ob0.target; b.hp = b.maxHp = Math.round(b.hp * 1.25); b.xp *= 1.5; b.gold *= 2;
+    }
     if (type !== 'elite_sneak' && rng.chance(0.5)) out.push(makeEnemy(rng.pick(tpls), run, {}));
     return out;
   }
@@ -482,6 +498,7 @@ function finish(run) {
       const s = run.loot.pick(STATS); run.char.stats[s]++; say(run, `You absorb the foe. +1 ${s}.`);
     }
     if (e.boss) run.stats.bosses++;
+    if (e.bountyTarget && run.mprog) run.mprog.bounty = true;
   }
   let reduced = false;
   if (run.career) {

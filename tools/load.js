@@ -3,5 +3,5 @@
 const path = require('path');
 const g = path.join(__dirname, '..', 'game');
 globalThis.DATA = require(path.join(g, 'data.js'));
-for (const f of ['core.js', 'combat.js', 'terrain.js', 'world.js', 'explore.js']) require(path.join(g, f));
+for (const f of ['core.js', 'combat.js', 'terrain.js', 'world.js', 'explore.js', 'guild.js']) require(path.join(g, f));
 module.exports = globalThis.Engine;

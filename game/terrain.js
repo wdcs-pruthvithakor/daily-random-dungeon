@@ -115,7 +115,7 @@ const SUBS = [
 ];
 const SET_A = ['Oak', 'Pine', 'Stone', 'River', 'Elm', 'Raven', 'Silver', 'Amber', 'Fox', 'Hawk', 'Willow', 'Iron', 'Gold', 'Sun', 'Moon', 'Bright'];
 const SET_B = ['ford', 'haven', 'stead', 'wick', 'brook', 'mere', 'fall', 'cross', 'watch', 'hollow', 'gate', 'ton'];
-const SUBNAME = { racehold: 'Homeland', village: 'Village', town: 'Town', spring: 'Spring', shrine: 'Shrine', ruins: 'Ruins', grove: 'Grove', mine: 'Old Mine', trader: 'Trader Camp', hermit: 'Wanderer', waystone: 'Waystone', vault: 'Vault', lair: 'Lair', dungeon: 'Dungeon' };
+const SUBNAME = { capital: 'Capital', racehold: 'Homeland', village: 'Village', town: 'Town', spring: 'Spring', shrine: 'Shrine', ruins: 'Ruins', grove: 'Grove', mine: 'Old Mine', trader: 'Trader Camp', hermit: 'Wanderer', waystone: 'Waystone', vault: 'Vault', lair: 'Lair', dungeon: 'Dungeon' };
 const THEME_BY_BIOME = {
   [B.PLAINS]: ['catacombs', 'fortress', 'warrens'], [B.FOREST]: ['warrens', 'fungal', 'catacombs'], [B.TAIGA]: ['frozen', 'warrens'], [B.TUNDRA]: ['frozen', 'catacombs'],
   [B.DESERT]: ['forge', 'graveyard', 'catacombs'], [B.SAVANNA]: ['warrens', 'graveyard', 'forge'], [B.JUNGLE]: ['sunken', 'fungal'], [B.SWAMP]: ['sunken', 'fungal', 'catacombs'],
@@ -131,6 +131,34 @@ const RACE_BIOME = {
 const RACE_MIN_RING = { Dragonkin: 2, Demonkin: 2, 'Undead-born': 1, 'Vampire-blooded': 3, Celestial: 3, Construct: 3, 'Void-touched': 4, 'Reincarnated Soul': 4, Slime: 1, Fae: 1 };
 const RACE_PLACE = { Human: 'Keep', Elf: 'Treehall', Dwarf: 'Deepforge', Beastkin: 'Den', Halfling: 'Burrow', Orc: 'Warcamp', Gnome: 'Workshop', Lizardfolk: 'Marsh Village', Dragonkin: 'Roost', Fae: 'Glade', 'Undead-born': 'Crypt Hamlet', Demonkin: 'Pit', 'Vampire-blooded': 'Manor', Celestial: 'Sanctum', Construct: 'Foundry', 'Void-touched': 'Rift Camp', Slime: 'Pool', 'Reincarnated Soul': 'Soul Shrine' };
 const WARDENS = () => Object.keys(E.WARDENS || {});
+// Capital cities: random, several per world, only in high-rank lands. Each belongs to a nation (usually human, sometimes another people or a mix),
+// and many (not all) have a palace and a ruler.
+const NATION_A = ['Aur', 'Vael', 'Kor', 'Thal', 'Brae', 'Ost', 'Mer', 'Dun', 'Sol', 'Ryn', 'Hal', 'Zar', 'Eld', 'Cal', 'Nor', 'Vess'];
+const NATION_B = ['andor', 'ethia', 'mark', 'heim', 'gard', 'oria', 'land', 'vale', 'ania', 'reach', 'dria', 'mont'];
+const POLITY = ['Kingdom', 'Kingdom', 'Kingdom', 'Empire', 'Duchy', 'Principality', 'Theocracy'], POLITY_FREE = ['Republic', 'Concord', 'Free League', 'Commonwealth'];
+const RULER_BY_RACE = { Human: ['King', 'Queen', 'Emperor', 'Empress', 'Duke'], Elf: ['High Queen', 'High King', 'Archdruid'], Dwarf: ['High King', 'Forge-Queen'], Beastkin: ['Alpha', 'Great Matriarch'], Halfling: ['Mayor-General', 'Thane'],
+  Orc: ['Warlord', 'Warchief'], Gnome: ['Grand Artificer', 'Magister'], Lizardfolk: ['Sun-Speaker', 'Tide-King'], Dragonkin: ['Dragon Sovereign', 'Wyrm-Queen'], Fae: ['Faerie Queen', 'Summer King'], 'Undead-born': ['Lich-Regent', 'Bone King'],
+  Demonkin: ['Overlord', 'Infernal Duchess'], 'Vampire-blooded': ['Blood Countess', 'Elder Lord'], Celestial: ['Archon', 'Seraph-Regent'], Construct: ['Prime Unit', 'Architect-King'], 'Void-touched': ['Rift Sovereign'], Slime: ['Great Ooze'], 'Reincarnated Soul': ['Returned King'] };
+const COUNCIL = ['Council of Elders', 'High Senate', 'Guild Assembly', 'Council of Nine', 'Grand Moot'];
+const RULER_FIRST = ['Aldric', 'Maren', 'Theron', 'Isolde', 'Kaelen', 'Odessa', 'Varric', 'Lysandra', 'Borin', 'Seraphine', 'Cassian', 'Ilmara', 'Torvald', 'Nyssa', 'Edric', 'Sorrel'];
+const RULER_LAST = ['Stormvale', 'Ironcrown', 'the Just', 'the Elder', 'Dawnbringer', 'Blackthorn', 'Silverhand', 'the Bold', 'Highmoor', 'the Wise', 'Ashenford', 'the Unyielding'];
+function nationOf(seed, hs, biome, ring, r) {
+  const all = Object.keys(RULER_BY_RACE);
+  let race = 'Human', mixed = false;
+  const k = r(31);
+  if (k < 0.16) mixed = true;
+  else if (k > 0.58) { const pool = (RACE_BIOME[biome] || ['Human']).filter(rn => ring >= (RACE_MIN_RING[rn] || 0)); race = (pool.length ? pool : ['Human'])[Math.floor(r(32) * (pool.length || 1))]; }
+  const nm = NATION_A[Math.floor(r(33) * NATION_A.length)] + NATION_B[Math.floor(r(34) * NATION_B.length)];
+  const palace = r(36) < 0.68;
+  const polity = (palace ? POLITY : POLITY_FREE)[Math.floor(r(35) * (palace ? POLITY : POLITY_FREE).length)];
+  let ruler = null;
+  if (palace) {
+    const titles = RULER_BY_RACE[mixed ? 'Human' : race] || ['King'];
+    ruler = { title: titles[Math.floor(r(37) * titles.length)], name: RULER_FIRST[Math.floor(r(38) * RULER_FIRST.length)] + ' ' + RULER_LAST[Math.floor(r(39) * RULER_LAST.length)] };
+  }
+  const council = COUNCIL[Math.floor(r(40) * COUNCIL.length)];
+  return { name: nm, polity, full: `${polity} of ${nm}`, race: mixed ? 'Mixed' : race, mixed, palace, ruler, council, all: all.length };
+}
 function zoneOf(x, y) { return Math.min(CAREER_RANKS.length - 1, Math.floor(Math.hypot(x, y) / 26)); }
 function structure(seed, cx, cy) {
   const hs = hashStr(seed + '|cell|' + cx + '|' + cy);
@@ -139,10 +167,16 @@ function structure(seed, cx, cy) {
   const d = Math.hypot(ox, oy);
   if (d < 4) return null;
   const near = d < 34;
-  if (r(3) > (near ? 0.7 : 0.55)) return null;
+  const isCap = d >= 78 && r(21) < 0.034;
+  if (!isCap && r(3) > (near ? 0.7 : 0.55)) return null;
   const t = tile(seed, ox, oy), bio = BIOMES[t.b];
   if (!bio.cost || t.b === B.SHALLOW || t.b === B.RIVER) return null;
   const ring = zoneOf(ox, oy);
+  if (isCap) {
+    const nation = nationOf(seed, hs, t.b, ring, r);
+    const cn = SET_A[Math.floor(r(8) * SET_A.length)] + SET_B[Math.floor(r(9) * SET_B.length)];
+    return { id: cx + ',' + cy, x: ox, y: oy, sub: 'capital', ring, biome: t.b, secret: false, kind: 'poi', settlement: true, capital: true, nation, name: cn.charAt(0).toUpperCase() + cn.slice(1) + ' City' };
+  }
   const mid = d > 12 && d < 52;
   let weights = SUBS.map(([k, w]) => [k, k === 'dungeon' && near ? w * 1.6 : (k === 'village' && mid ? w * 5 : (k === 'town' && d > 26 && d < 70 ? w * 4 : w))]);
   let tot = weights.reduce((a, b) => a + b[1], 0), pick = r(4) * tot, sub = 'dungeon';

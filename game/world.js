@@ -54,6 +54,9 @@ function placeMissionNodes(dungeon, mission) {
   } else if (mission.type === 'relic') {
     const r = rng.int(Math.max(1, Math.floor(n / 2)), n - 2);
     dungeon.rows[r].push({ type: 'relic', id: `r${r}x` });
+  } else if (mission.type === 'bounty') {
+    const r = rng.int(1, Math.max(1, n - 2));
+    dungeon.rows[r].push({ type: 'elite', id: `r${r}b` });
   } else if (mission.type === 'explore') {
     // make sure there are enough special rooms (shrines, camps, events, chests, traps) to choose from
     const need = (mission.objective && mission.objective.count || 3) + 2, specials = ['shrine', 'camp', 'event', 'treasure', 'trap'];
@@ -73,7 +76,7 @@ function makeRun(char, equip, seed, rankId, dungeon, opts) {
     flags: {}, blessing: o.blessing ? 1 : 0, poison: 0, bleed: 0, burn: 0, weak: 0, block: 0, counter: 0, stagger: false, buffs: {}, spirit: null, ward: 0, elixir: false,
     log: [], rng: new RNG(seed + '|combat|' + char.name), loot: new RNG(seed + '|loot|' + char.name), combat: null, dead: false, escaped: false,
     stats: { kills: 0, bosses: 0, secrets: 0, rooms: 0 }, companion: o.companion || null, party: o.party || null, mission: o.mission || null, career: !!o.career, clues: 0, repGain: 0, creditGain: 0,
-    mprog: { kills: {}, mats: {}, special: [], rescued: false, relic: false, elites: 0, secrets: 0, potions: 0 },
+    mprog: { kills: {}, mats: {}, special: [], rescued: false, relic: false, elites: 0, secrets: 0, potions: 0, bounty: false, bountySeen: false },
   };
   run.d = derive(char, equip);
   run.hp = Math.round(run.d.maxHp * (o.hpFrac || 1)); run.en = run.d.maxEn;
@@ -128,6 +131,8 @@ function missionMet(run) {
     case 'explore': return p.special.length >= o.count;
     case 'rescue': return p.rescued;
     case 'relic': return p.relic;
+    case 'bounty': return !!p.bounty;
+    case 'cull': return run.stats.kills >= o.count;
     default: return false;
   }
 }
@@ -142,6 +147,8 @@ function missionProgress(run) {
     case 'explore': return `${Math.min(o.count, p.special.length)}/${o.count}`;
     case 'rescue': return p.rescued ? 'Rescued' : 'Missing';
     case 'relic': return p.relic ? 'Recovered' : 'Not found';
+    case 'bounty': return p.bounty ? 'Target slain' : 'Target at large';
+    case 'cull': return `${Math.min(o.count, run.stats.kills)}/${o.count}`;
     default: return '';
   }
 }
@@ -366,6 +373,13 @@ function buildMission(rng, rankId, type, key, extra) {
   } else if (type === 'explore') {
     const count = 3 + (ri >= 2 ? 1 : 0);
     objective = { kind: 'explore', count, label: `Enter ${count} special rooms (shrines, camps, events, traps, chests)` };
+  } else if (type === 'bounty') {
+    const first = ['Grimjaw', 'Ashmaw', 'Velka', 'Rotfang', 'Skarn', 'Moldred', 'Hexa', 'Brakk', 'Vorn', 'Nixa', 'Gorrash', 'Thessaly'], epi = ['the Butcher', 'Bonecrusher', 'the Red', 'Two-Tongues', 'the Unburied', 'of the Pit', 'Gravewalker', 'the Cruel'];
+    const nm = `${rng.pick(first)} ${rng.pick(epi)}`;
+    objective = { kind: 'bounty', target: nm, label: `Slay the wanted beast ${nm} (an elite hiding in the dungeon)` };
+  } else if (type === 'cull') {
+    const count = 6 + ri * 2;
+    objective = { kind: 'cull', count, label: `Defeat ${count} monsters of any kind` };
   } else if (type === 'rescue') objective = { kind: 'rescue', label: 'Find and rescue the missing expedition member' };
   else objective = { kind: 'relic', relicName: rng.pick(D.RELIC_NAMES), label: 'Recover the relic from the sealed chamber' };
   const opt = rng.chance(0.65) ? rng.pick(Object.keys(D.OPTIONALS)) : null;
@@ -382,41 +396,29 @@ function careerStart(char, opts) {
   const c = JSON.parse(JSON.stringify(char));
   return {
     char: c, equip: starterGear(c), stash: [], cons: { antidote: 1, bandage: 2 }, mats: {}, potions: 2, gold: 0, credits: 0, rep: 0,
-    clears: { F: 0, E: 0, D: 0, C: 0, B: 0, A: 0, S: 0 }, boardN: 0, board: null, shop: null, rumor: false, blessNext: false, companion: null,
+    clears: { F: 0, E: 0, D: 0, C: 0, B: 0, A: 0, S: 0 }, grank: 'F', qdone: {}, boardN: 0, board: null, shop: null, rumor: false, blessNext: false, companion: null,
     runs: 0, deaths: 0, hardcore: !!(opts && opts.hardcore), done: [], wseed: (opts && opts.worldSeed) ? String(opts.worldSeed).trim() : '',
   };
 }
-function careerUnlocked(career, rankId) {
-  const i = rankIndex(rankId);
-  return i === 0 || (career.clears[CAREER_RANKS[i - 1]] >= 1 && career.char.level >= RANKS[rankId].rec - 3);
-}
-function careerRank(career) {
+// Guild rank is earned only by passing a rank test (see guild.js). Older saves start from the rank the old rules would have given them.
+function legacyRank(career) {
   let r = 'F';
-  for (const id of CAREER_RANKS) if (careerUnlocked(career, id)) r = id;
+  CAREER_RANKS.forEach((id, i) => { if (i === 0 || (career.clears[CAREER_RANKS[i - 1]] >= 1 && career.char.level >= RANKS[id].rec - 3)) r = id; });
   return r;
 }
+function careerRank(career) {
+  if (!career.grank) career.grank = legacyRank(career);
+  return career.grank;
+}
+// A licence covers your own rank; the board lets you take quests one rank above it. Dungeons themselves are open to everyone.
+function careerUnlocked(career, rankId) { return rankIndex(rankId) <= rankIndex(careerRank(career)) + 1; }
 function repTitle(rep) {
   let t = D.REP_TITLES[0][1];
   for (const [at, name] of D.REP_TITLES) if (rep >= at) t = name;
   return t;
 }
 function priceMul(career) { return 1 - Math.min(0.15, Math.max(0, career.rep) / 300); }
-function careerBoard(career) {
-  if (career.board && career.board.n === career.boardN) return career.board.missions;
-  const rng = new RNG('board|' + career.char.name + '|' + career.boardN);
-  const unlocked = CAREER_RANKS.filter(r => careerUnlocked(career, r));
-  const top = unlocked[unlocked.length - 1];
-  const missions = [];
-  const types = Object.keys(D.MISSION_TYPES);
-  for (let k = 0; k < 6; k++) {
-    const rank = k === 0 ? top : (rng.chance(0.55) ? unlocked[Math.max(0, unlocked.length - 1 - rng.int(0, 1))] : rng.pick(unlocked));
-    const type = k === 0 ? 'clear' : rng.weighted(types, t => D.MISSION_TYPES[t].weight);
-    const emergency = k === 5 && rng.chance(0.35);
-    missions.push(buildMission(rng, rank, type, `${career.char.name}|${career.boardN}|${k}`, { emergency }));
-  }
-  career.board = { n: career.boardN, missions };
-  return missions;
-}
+function careerBoard(career) { return E.guildBoard(career); }
 function careerHub(career) {
   const run = makeRun(career.char, career.equip, 'hub', 'F', generateDungeon('hub', 'F', { noAnomaly: true }), { cons: career.cons, career: true });
   run.inv = career.stash; run.mats = career.mats; run.gold = career.gold; run.potions = career.potions;
@@ -427,7 +429,7 @@ function careerSyncFromHub(career, hub) { career.gold = hub.gold; career.potions
 function careerNewRun(career, mission) {
   const char = JSON.parse(JSON.stringify(career.char));
   const dungeon = generateDungeon(mission.seed, mission.rank, { themeId: mission.themeId, anomaly: mission.anomaly || undefined, noAnomaly: !mission.free && !mission.anomaly, corrupted: mission.corrupted, rooms: mission.rooms || 0, warden: mission.warden || null });
-  const secret = placeSecret(dungeon, char, RACE_BY[char.race]);
+  const secret = mission.duel ? false : placeSecret(dungeon, char, RACE_BY[char.race]);
   placeMissionNodes(dungeon, mission.free ? null : mission);
   const equip = {};
   for (const slot of D.SLOTS) { const it = career.equip[slot]; equip[slot] = it ? Object.assign({}, it, { fromVault: true }) : null; }
@@ -438,6 +440,8 @@ function careerNewRun(career, mission) {
     hpFrac: career.char.injuries && career.char.injuries.length ? 0.85 : 1,
   });
   run.nodeId = mission.nodeId || null; run.arena = !!mission.arena;
+  run.duel = mission.duel || null; run.tourney = mission.tourney || null; run.rankTest = mission.rankTest || null;
+  if (run.duel) run.seenMons = {};
   run.secretShown = secret; run.startCons = Object.assign({}, career.cons); run.startPotions = career.potions;
   career.blessNext = false;
   return run;
@@ -446,6 +450,8 @@ function careerEnd(career, run, outcome) {
   const rk = RANKS[run.rankId];
   const strip = it => it && Object.assign({}, it, { fromVault: false });
   const res = { gold: 0, banked: [], mats: {}, mission: null, penalties: [], permadeath: false, injury: null };
+  // arena bouts are fought to a yield, not to the death
+  if (run.duel && outcome === 'dead') { outcome = 'extracted'; res.yielded = true; }
   career.runs++;
   career.char = run.char;
   const m = run.mission;
@@ -462,6 +468,8 @@ function careerEnd(career, run, outcome) {
         const item = genItem(new RNG(m.seed + '|reward'), { rarity: m.reward.itemRarity, heat: 0, luck: 0, rankMul: Math.pow(rk.cs, 0.5) });
         career.stash.push(item); res.banked.push(item);
         res.mission = { done: true, gold, credits, rep, optional: optOk, item };
+        career.qdone = career.qdone || {}; career.qdone[m.rank] = (career.qdone[m.rank] || 0) + 1;
+        if (m.royal) E.royalDone(career, m, res);
       } else {
         if (outcome === 'extracted') { career.rep = Math.max(0, career.rep - 1); }
         res.mission = { done: false, rep: outcome === 'extracted' ? -1 : 0 };
@@ -509,10 +517,7 @@ function careerEnd(career, run, outcome) {
     if (p.left <= 0) { res.penalties.push(`${p.name} moves on to other work.`); career.party = null; }
   }
   career.boardN++; career.board = null; career.shop = null; career.rumor = false;
-  if (run.arena && outcome === 'cleared') {
-    const ri = rankIndex(run.rankId), g = Math.round(90 * rk.rewards), cr = 3 + ri, rp = 3 + ri;
-    career.gold += g; career.credits += cr; career.rep += rp; res.arena = { gold: g, credits: cr, rep: rp };
-  }
+  E.guildAfterRun(career, run, outcome, res);
   E.worldAfterRun(career, run, outcome, res);
   while (career.stash.length > 40) {
     const idx = career.stash.reduce((mi, it, i, a) => (it.value < a[mi].value ? i : mi), 0);
@@ -713,6 +718,7 @@ function partyOffers(career) {
       shield: size === 2 ? 0.1 : 0.16, pw: +(0.8 + 0.12 * ri).toFixed(2),
     });
   }
+  if (place.kind === 'capital') for (const l of E.legendaryOffers(career, place)) out.push(l);
   return out;
 }
 function partyJoin(career, id) {

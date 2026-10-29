@@ -20,7 +20,7 @@ V.careerhome = function () {
       <label class="check"><input type="checkbox" data-act="hardcore" ${S.hardcore ? 'checked' : ''}> Hardcore: death is permanent</label>
       <p><button class="primary big" data-act="careerbegin">Begin a new career</button></p></div>
     <div class="panel"><h3>Guild ranks</h3><table class="t"><tr><th>Rank</th><th>Rooms</th><th>Rec. level</th></tr>${E.CAREER_RANKS.map(r => `<tr><td><b>${r}</b></td><td>${E.RANKS[r].rooms}</td><td>${E.RANKS[r].rec}</td></tr>`).join('')}</table>
-    <p class="small dim">Promotion needs a clear of the previous rank and a level close to the next rank's recommendation.</p>
+    <p class="small dim">Promotion needs a couple of finished quests and a passed rank test. There is no minimum level, but the trial is hard if you are under-levelled.</p>
     ${S.save.fallen.length ? `<h3 style="margin-top:12px">Hall of the Fallen</h3>${S.save.fallen.slice(-6).reverse().map(f => `<div class="small dim">☠️ ${esc(f.name)} the ${esc(f.prof)}: level ${f.level}, rank ${f.rank}, ${f.runs} expeditions</div>`).join('')}` : ''}</div></div>`;
 };
 V.careerroll = function () {
@@ -45,16 +45,18 @@ function missionCard(car, m, i) {
     ${m.optional ? `<div class="small dim">Bonus: ${esc(m.optional.label)} (+${Math.round(m.optional.bonus * 100)}% gold)</div>` : ''}
     ${an}
     <div class="small"><span style="color:${tag[1]}">${tag[0]}</span> <span class="dim">· recommended level ${m.rec}</span></div>
+    ${E.canTake(car, m) ? '' : `<div class="small" style="color:var(--bad)">🔒 ${esc(E.takeNote(car, m))}</div>`}
     <div class="small dim">Reward: ${m.reward.gold}g · ${m.reward.credits} credits · ${m.reward.rep} rep · ${E.RARITIES[m.reward.itemRarity].name} item</div></div>
-    <button class="primary" data-act="embark" data-i="${i}">Embark</button></div></div>`;
+    <button class="primary" data-act="embark" data-i="${i}" ${E.canTake(car, m) ? '' : 'disabled'}>Embark</button></div></div>`;
 }
-function hubBoard(car) {
+function guildBoardPanel(car) {
   const board = E.careerBoard(car);
   const rows = board.map((m, i) => missionCard(car, m, i)).join('');
-  const quick = `<div class="panel"><h3>Free expedition</h3><p class="small dim">Skip the contracts and delve at your own pace (no mission rewards).</p><div class="row">${E.CAREER_RANKS.filter(r => E.careerUnlocked(car, r)).map(r => `<button data-act="freerun" data-rank="${r}">${r}-rank</button>`).join('')}</div></div>`;
   return `<div class="panel"><div class="row between"><h3 style="flex:1">Guild mission board</h3><button class="tiny" data-act="refreshboard" ${car.gold >= 40 ? '' : 'disabled'}>Refresh board (40g)</button></div><div class="grid g2">${rows}</div>
-    <p class="small dim">Each expedition refreshes the board. Completing a mission pays gold, Guild Credits, reputation and a gear reward. Objectives other than clearing the boss can be finished and then extracted.</p></div>${quick}`;
+    <p class="small dim">Each expedition refreshes the board. Completing a mission pays gold, Guild Credits, reputation and a gear reward. Objectives other than clearing the boss can be finished and then extracted.</p></div>`;
 }
+UI.guildBoardPanel = guildBoardPanel;
+function hubBoard(car) { return UI.guildPanel(car); }
 function hubHero(car) {
   const hub = S.hub;
   const talents = car.char.talents.map(id => `<div class="small"><b>${esc(E.TALENT_BY[id].name)}:</b> <span class="dim">${esc(E.TALENT_BY[id].desc)}</span></div>`).join('');
@@ -129,7 +131,7 @@ UI.partyPanel = function (car) {
     const offers = E.partyOffers(car);
     board = `<p class="small dim">${esc(place.name)} (area rank ${E.CAREER_RANKS[Math.min(place.zone, 6)]}). The notice board changes every week.</p>` + offers.map(o => {
       const why = car.companion ? 'Dismiss your companion first' : car.char.level < o.minLevel ? `Needs level ${o.minLevel}` : (car.runs || 0) < o.needRuns ? `Needs ${o.needRuns} expeditions` : '';
-      return `<div class="item" style="--c:#8fd0ff"><div class="slot">👥</div><div class="body"><b>${esc(o.name)}</b> <span class="dim small">· rank ${o.zone} area</span><div>${mem(o.members)}</div>
+      return `<div class="item" style="--c:${o.legendary ? '#ffcb3d' : '#8fd0ff'}"><div class="slot">${o.legendary ? '🌟' : '👥'}</div><div class="body"><b>${esc(o.name)}</b> ${o.legendary ? '<span class="tag" style="color:#ffcb3d;border-color:#ffcb3d">LEGENDARY</span>' : ''}<span class="dim small">· rank ${o.zone} area</span>${o.quote ? `<div class="small dim"><i>${esc(o.quote)}</i></div>` : ''}<div>${mem(o.members)}</div>
         <div class="small dim">Level ${o.minLevel}+ · ${o.needRuns}+ expeditions · stay ${o.stay}+ or pay ${o.leavePay}g · works ${o.total} expeditions · gold/loot ${pct(o.lootMul)}, XP ${pct(o.xpMul)}, damage -${Math.round(o.shield * 100)}%</div></div>
         <button class="tiny" data-act="partyjoin" data-id="${esc(o.id)}" ${why ? 'disabled' : ''} title="${esc(why)}">${why || 'Join'}</button></div>`;
     }).join('');
@@ -143,7 +145,8 @@ function townPanels(car) {
   const hire = Object.keys(D.COMPANIONS).map(id => { const c = D.COMPANIONS[id], p = E.hireCost(car, id); return `<div class="item" style="--c:#8fe08f"><div class="slot">${c.glyph}</div><div class="body"><b>${esc(c.name)}</b><div class="small dim">${esc(c.desc)}</div></div><button class="tiny" data-act="hire" data-id="${id}" ${car.gold >= p && !car.companion ? '' : 'disabled'}>Hire ${p}g</button></div>`; }).join('');
   const rumor = car.rumor ? `<p class="small" style="color:var(--accent)">${esc(E.rumorText(car))}</p>` : `<button class="tiny" data-act="rumor" ${car.gold >= E.rumorCost(car) ? '' : 'disabled'}>Buy a rumor (${E.rumorCost(car)}g): reveal anomalies on the board</button>`;
   const rep = car.rep, titles = D.REP_TITLES, ti = titles.findIndex(t => t[0] > rep), next = ti < 0 ? null : titles[ti];
-  const ranks = E.CAREER_RANKS.map(r => `<tr><td><b>${r}</b></td><td>${E.RANKS[r].rec - 3}+</td><td>${car.clears[r]}</td><td>${E.careerUnlocked(car, r) ? '✔' : '🔒'}</td></tr>`).join('');
+  const mine = E.CAREER_RANKS.indexOf(E.careerRank(car));
+  const ranks = E.CAREER_RANKS.map((r, i) => `<tr><td><b>${r}</b></td><td>${E.RANKS[r].rec - 3}+</td><td>${car.clears[r]}</td><td>${i <= mine ? '✔ held' : i === mine + 1 ? 'test' : '🔒'}</td></tr>`).join('');
   const healerP = `<div class="panel"><h3>⛪ Healer</h3><p class="small dim">Injuries from defeat fade after a few expeditions, or you can pay to heal them.</p>${healer}
       <div class="item" style="--c:#ffe08a"><div class="slot">✨</div><div class="body"><b>Priest's blessing</b><div class="small dim">+15% damage on your next expedition.${car.blessNext ? ' (active)' : ''}</div></div><button class="tiny" data-act="bless" ${car.gold >= E.blessingCost(car) && !car.blessNext ? '' : 'disabled'}>${E.blessingCost(car)}g</button></div></div>`;
   const partyP = UI.partyPanel(car);
@@ -152,7 +155,7 @@ function townPanels(car) {
   const guildP = `
 <div class="panel"><h3>🏛️ Guild hall</h3><p>Reputation: <b style="color:var(--accent)">${rep}</b> (${E.repTitle(rep)})${next ? ` · next title at ${next[0]}` : ''}</p>${bar(rep, next ? next[0] : Math.max(1, rep), 'xp')}
       <p class="small dim">Reputation lowers shop prices (up to 15%). Completing missions raises it; abandoning or failing them lowers it.</p><p>Guild Credits: <b style="color:var(--accent)">${car.credits}</b></p>
-      <table class="t"><tr><th>Rank</th><th>Level</th><th>Clears</th><th>Open</th></tr>${ranks}</table></div>`;
+      <table class="t"><tr><th>Rank</th><th>Test level</th><th>Dungeon clears</th><th>Status</th></tr>${ranks}</table></div>`;
   const recordP = `
 <div class="panel"><h3>Career record</h3><div class="small">Expeditions ${car.runs} · Defeats ${car.deaths}${car.hardcore ? ' · <span style="color:var(--bad)">Hardcore</span>' : ''}</div></div>
     ${S.save.fallen.length ? `<div class="panel"><h3>Hall of the Fallen</h3>${S.save.fallen.slice(-6).reverse().map(f => `<div class="small dim">☠️ ${esc(f.name)} the ${esc(f.prof)}: level ${f.level}, rank ${f.rank}</div>`).join('')}</div>` : ''}`;
@@ -162,7 +165,7 @@ V.hub = function () {
   const car = S.save.career, c = car.char, t = tierOf(c.tier);
   const need = E.xpNeeded(c.level, true), rank = E.careerRank(car);
   const idx = E.CAREER_RANKS.indexOf(rank), nextR = E.CAREER_RANKS[idx + 1];
-  const nextInfo = nextR ? `Next rank ${nextR}: clear a ${rank}-rank dungeon and reach level ${E.RANKS[nextR].rec - 3}.` : 'You hold the highest rank. SS and beyond are rumors.';
+  const nextInfo = nextR ? `Next rank ${nextR}: finish 2 quests and pass the rank test at any Guild Hall.` : 'You hold the highest rank. SS and beyond are rumors.';
   const sub = [['map', '🗺️ Map'], ['town', '🏰 Town'], ['board', '📜 Board'], ['hero', '🧙 Hero'], ['bag', '🎒 Bag'], ['market', '🏪 Market'], ['smith', '⚒️ Smithy'], ['alchemy', '⚗️ Alchemy']];
   const nav = `<div class="subtabs">${sub.map(([id, n]) => `<button class="${S.hubTab === id ? 'on' : ''}" data-act="hubtab" data-sub="${id}">${n}${id === 'hero' && (c.points > 0 || c.skillPts > 0) ? ' <span class="dot"></span>' : ''}</button>`).join('')}</div>`;
   if (!sub.some(x => x[0] === S.hubTab)) S.hubTab = 'map';
