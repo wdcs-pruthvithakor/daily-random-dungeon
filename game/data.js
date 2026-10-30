@@ -99,13 +99,13 @@ sk('throwingknife', 'Throwing Knife', ['book'], 1, 1, 1, 'hit', { mult: 0.95, pi
 sk('meditate', 'Meditate', ['book'], 1, 2, 0, 'focus', { refund: 8, pct: 0.1 }, 'Regain 8 energy and heal 10%.');
 sk('rally', 'Rally', ['book'], 1, 1, 2, 'buff', { buff: { dmg: 0.15, evade: 0.1, turns: 3 } }, '+15% damage and +10% evasion for 3 turns.');
 // signature skills
-sk('ultimate', 'Awakened Power', ['sig'], 0, 3, 5, 'hit', { mult: 3.2, once: true }, 'Once per fight: devastating strike.');
-sk('bloodpact', 'Blood Pact', ['sig'], 0, 2, 0, 'hit', { mult: 3.2, hpCost: 0.2, once: true }, 'Once per fight: pay 20% HP for massive damage.');
-sk('rewind', 'Rewind', ['sig'], 0, 1, 3, 'rewind', { once: true }, 'Once per fight: heal 35% and regain 2 AP.');
-sk('devour', 'Devour', ['sig'], 0, 2, 3, 'hit', { mult: 1.7, drain: 0.5, once: true }, 'Once per fight: strike and heal for half the damage.');
+sk('ultimate', 'Awakened Power', ['sig'], 0, 2, 4, 'hit', { mult: 4.8, pierce: true, once: true }, 'Once per fight: a devastating strike that ignores defense.');
+sk('bloodpact', 'Blood Pact', ['sig'], 0, 2, 0, 'hit', { mult: 5.4, pierce: true, hpCost: 0.2, once: true }, 'Once per fight: pay 20% HP for massive damage that ignores defense.');
+sk('rewind', 'Rewind', ['sig'], 0, 0, 3, 'rewind', { once: true }, 'Once per fight, free: heal 40% and regain 2 AP.');
+sk('devour', 'Devour', ['sig'], 0, 2, 3, 'hit', { mult: 3.4, drain: 0.7, once: true }, 'Once per fight: a heavy strike that heals you for 70% of the damage.');
 sk('phase', 'Phase Shift', ['sig'], 0, 1, 3, 'phase', { once: true }, 'Once per fight: stun all enemies for a turn.');
-sk('gamble', 'Gamble', ['sig'], 0, 2, 2, 'hit', { gamble: true }, 'Damage x0.4 to x4.0. Luck loads the dice.');
-sk('quake', 'World Quake', ['sig'], 0, 3, 5, 'aoe', { mult: 2.4, once: true }, 'Once per fight: shatter the whole room.');
+sk('gamble', 'Gamble', ['sig'], 0, 1, 2, 'hit', { gamble: true }, 'Damage x0.8 to x6.0, usable every turn. Luck loads the dice.');
+sk('quake', 'World Quake', ['sig'], 0, 2, 5, 'aoe', { mult: 3.8, status: { stun: 1 }, once: true }, 'Once per fight: shatter the whole room and stun every enemy.');
 
 // reactive skills: read the enemy's telegraphed move
 // interrupt: [intents] cancels that action; parry: [intents] negates the first such attack and counters; punish/sunder: break shields and bracing foes

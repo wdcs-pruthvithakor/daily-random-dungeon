@@ -327,8 +327,19 @@ const EVOLUTIONS = {
   summon: { a: { name: 'Enduring', desc: 'The spirit lasts 2 turns longer', mods: { spiritTurnsAdd: 2 } }, b: { name: 'Pack', desc: 'The spirit hits 50% harder', mods: { spiritMul: 1.5 } } },
 };
 function evoChoice(char, id) { return char.evo && char.evo[id] ? char.evo[id] : null; }
+// Signature skills grow with the hero's tier: Rare x1.0, Epic x1.2, Legendary x1.45, Mythic x1.75 and two uses per fight.
+const SIG_MUL = [0, 0, 1, 1.2, 1.45, 1.75];
+function sigScaled(char, s) {
+  const m = SIG_MUL[TIER_BY[char.tier]] || 1, c = Object.assign({}, s, { sigMul: m });
+  if (c.mult) c.mult = Math.round(c.mult * m * 100) / 100;
+  if (c.pct) c.pct = Math.min(0.95, c.pct * m);
+  if (c.once && TIER_BY[char.tier] >= 5) { c.charges = 2; c.desc = c.desc.replace('Once per fight', 'Twice per fight'); }
+  return c;
+}
 function effSkill(char, id) {
-  const s = D.SKILLS[id], br = evoChoice(char, id), def = EVOLUTIONS[s.type];
+  let s = D.SKILLS[id];
+  if (s.kinds.includes('sig')) s = sigScaled(char, s);
+  const br = evoChoice(char, id), def = EVOLUTIONS[s.type];
   if (!br || !def) return s;
   const ev = def[br], m = ev.mods, c = Object.assign({}, s);
   if (m.multMul && c.mult) c.mult = c.mult * m.multMul;

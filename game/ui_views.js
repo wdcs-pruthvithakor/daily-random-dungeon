@@ -180,7 +180,7 @@ V.combat = function () {
   } else {
     const btns = E.loadout(run.char).map(id => {
       const s = E.effSkill(run.char, id), err = E.canUse(run, id), cost = E.skillCost(run, id), mr = E.masteryRank(run.char, id);
-      return `<button data-act="skill" data-id="${id}" ${err ? 'disabled' : ''} title="${esc(s.desc)}"><b>${esc(s.name)}</b><small><span class="cost">${s.ap} AP${cost ? ' · ' + cost + ' ' + run.d.resName : ''}</span>${s.once ? ' · once' : ''}${mr ? ' · ' + E.MASTERY[mr].name : ''}</small><small>${esc(s.desc)}</small></button>`;
+      return `<button data-act="skill" data-id="${id}" ${err ? 'disabled' : ''} title="${esc(s.desc)}"><b>${esc(s.name)}</b><small><span class="cost">${s.ap} AP${cost ? ' · ' + cost + ' ' + run.d.resName : ''}</span>${s.once ? (s.charges > 1 ? ' · ' + (s.charges - ((run.combat.used || {})[id] || 0)) + '/' + s.charges + ' left' : ' · once') : ''}${mr ? ' · ' + E.MASTERY[mr].name : ''}</small><small>${esc(s.desc)}</small></button>`;
     }).join('');
     controls = `<div class="panel"><div class="row between"><h3 style="flex:1">Turn ${c.turn} · <span style="color:var(--accent)">${c.ap} AP</span></h3><span class="small dim">Block ${Math.round(run.block * 100)}%${run.counter ? ' · Counter' : ''}</span></div>
       <div class="skills">${btns}<button data-act="cpotion" ${c.ap >= 1 && run.potions > 0 && run.hp < run.d.maxHp ? '' : 'disabled'}><b>🧪 Potion</b><small><span class="cost">1 AP</span> · ${run.potions} left</small><small>Heal 40% max HP.</small></button></div>
@@ -405,7 +405,7 @@ const GUIDE = {
     ${gp('Reactive skills', '<p class="small">Every discipline has two skills that read the enemy&#39;s telegraphed move. <b>Interrupt</b> skills cancel a matching action (a summon, curse, heavy blow, shield). <b>Parry</b> guards negate the first matching attack this turn and counter it. <b>Sunder</b> and <b>punish</b> skills shatter shields and hit bracing foes harder. Look at the enemy&#39;s Next move before you choose.</p>')}
     ${gp('Evolutions', '<p class="small">When a skill reaches Practiced rank (15 uses) you can spend 1 skill point to evolve it, once, into one of two branches. For example a strike becomes Precision (+30% damage, ignores defense) or Rending (bleeds, costs 1 less energy). Two heroes of the same class end up with different skills.</p>' + gt(['Type', 'Branch A', 'Branch B'], Object.keys(E.EVOLUTIONS).map(k => [k, E.EVOLUTIONS[k].a.name + ': ' + E.EVOLUTIONS[k].a.desc, E.EVOLUTIONS[k].b.name + ': ' + E.EVOLUTIONS[k].b.desc])))}
     ${gp('Mastery', '<p class="small">Skills level up as you use them. Each mastery rank gives +8% effect (five ranks).</p>')}
-    ${gp('Signature skills', '<p class="small">Rare and higher professions have a signature skill. It is always equipped and does not use a slot.</p>')}
+    ${gp('Signature skills', '<p class="small">Rare and higher professions have a signature skill. It is always equipped and does not use a slot. Signatures are your strongest move (4 to 5x damage, usually ignoring defense) and scale with tier: Rare x1, Epic x1.2, Legendary x1.45, Mythic x1.75 and Mythic heroes can use theirs twice per fight.</p>')}
     ${gp('Tomes', '<p class="small">A Tome teaches a skill from another discipline. Buy them at the credit shop or find them as loot. Reading one uses it up.</p>')}
     ${gp('Cost', '<p class="small">A skill costs AP and energy. Silence makes every skill cost 1 more energy. Mana Drought slows energy regeneration.</p>')}
     ${gp('Effect types', gt(['Effect', 'Meaning'], [

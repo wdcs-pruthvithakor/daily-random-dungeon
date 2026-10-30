@@ -182,7 +182,7 @@ function canUse(run, id) {
   if (!c || c.over || run.dead) return 'No combat';
   if (c.ap < s.ap) return 'Not enough AP';
   if (run.en < skillCost(run, id)) return 'Not enough ' + run.d.resName.toLowerCase();
-  if (s.once && c.used[id]) return 'Already used this fight';
+  if (s.once && (c.used[id] || 0) >= (s.charges || 1)) return 'Already used this fight';
   if (s.hpCost && run.hp <= run.d.maxHp * s.hpCost + 1) return 'Too wounded';
   return null;
 }
@@ -306,7 +306,7 @@ function act0(run, id, targetIdx) {
   if (!target || target.hp <= 0) target = living(run)[0];
   c.ap -= s.ap;
   run.en -= skillCost(run, id);
-  if (s.once) c.used[id] = true;
+  if (s.once) c.used[id] = (c.used[id] || 0) + 1;
   run.char.mastery[id] = (run.char.mastery[id] || 0) + 1;
   const mb = 1 + masteryBonus(run.char, id);
   if (s.hpCost) { run.hp -= Math.round(d.maxHp * s.hpCost); say(run, `You spend ${Math.round(s.hpCost * 100)}% HP.`); }
@@ -320,7 +320,7 @@ function act0(run, id, targetIdx) {
       let mult = (s.mult || 1) * mb, force = false;
       if (s.gamble) {
         const u = run.rng.next();
-        mult = (0.4 + 3.6 * Math.pow(u, 1 / (1 + d.st.LUK * 0.08))) * mb;
+        mult = (0.8 + 5.2 * Math.pow(u, 1 / (1 + d.st.LUK * 0.08))) * mb * (s.sigMul || 1);
         say(run, `The dice roll... x${mult.toFixed(1)}`);
       }
       if (s.combo && Object.values(t.status).some(v => v > 0)) { mult *= 1.5; force = true; }
@@ -366,7 +366,7 @@ function act0(run, id, targetIdx) {
     heal(s.pct);
     say(run, 'You gather yourself.');
   } else if (s.type === 'rewind') {
-    healHp(run, d.maxHp * 0.35); c.ap += 2; say(run, 'Time folds back. You recover and gain 2 AP.');
+    healHp(run, d.maxHp * Math.min(0.9, 0.4 * (s.sigMul || 1))); c.ap += 2; say(run, 'Time folds back. You recover and gain 2 AP.');
   } else if (s.type === 'phase') {
     for (const e of living(run)) e.status.stun = Math.max(e.status.stun, 1);
     say(run, 'Reality skips. Every enemy is stunned.');
