@@ -21,7 +21,7 @@ sk('whirlwind', 'Whirlwind', ['melee'], 10, 3, 5, 'aoe', { mult: 1.3 }, 'A spinn
 sk('executioner', 'Executioner', ['melee'], 15, 2, 4, 'hit', { mult: 1.5, execute: { below: 0.35, bonus: 1.0 } }, 'Double damage to enemies below 35% HP.');
 sk('earthshatter', 'Earthshatter', ['melee'], 20, 3, 6, 'aoe', { mult: 1.4, status: { stun: 1 } }, 'Smash the ground: hits and stuns all enemies.');
 sk('bladestorm', 'Bladestorm', ['melee'], 28, 3, 6, 'hit', { mult: 0.95, hits: 3 }, 'Three rapid strikes.');
-sk('titansfall', 'Titan\'s Fall', ['melee'], 35, 3, 7, 'hit', { mult: 4.2, once: true }, 'Once per fight: a crushing blow.');
+sk('titansfall', 'Titan\'s Fall', ['melee'], 35, 3, 7, 'hit', { mult: 4.2, cd: 5 }, 'Cooldown 5 turns: a crushing blow.');
 // tank
 sk('shieldbash', 'Shield Bash', ['tank'], 1, 2, 2, 'hit', { mult: 1.2, status: { stun: 1 } }, 'Stuns the target for a turn.');
 sk('fortify', 'Fortify', ['tank'], 1, 1, 2, 'guard', { block: 0.7 }, 'Take 70% less damage until your next turn.');
@@ -30,8 +30,8 @@ sk('counter', 'Counterstance', ['tank'], 6, 1, 2, 'guard', { block: 0.5, reflect
 sk('shieldslam', 'Shield Slam', ['tank'], 10, 2, 3, 'hit', { mult: 1.7, status: { weaken: 2 } }, 'Heavy blow that weakens the target.');
 sk('bulwark', 'Bulwark', ['tank'], 15, 2, 3, 'guard', { block: 0.8, refund: 3 }, 'Block 80% and regain 3 energy.');
 sk('judgement', 'Judgement', ['tank'], 20, 2, 4, 'hit', { mult: 2.1, status: { weaken: 2 } }, 'A righteous strike.');
-sk('unbreakable', 'Unbreakable', ['tank'], 28, 2, 4, 'guard', { block: 0.9, pct: 0.15, once: true }, 'Once per fight: block 90% and heal 15%.');
-sk('colossus', 'Colossus', ['tank'], 35, 3, 6, 'hit', { mult: 2.6, status: { stun: 1 }, once: true }, 'Once per fight: slam and stun.');
+sk('unbreakable', 'Unbreakable', ['tank'], 28, 2, 4, 'guard', { block: 0.9, pct: 0.15, cd: 4 }, 'Cooldown 4 turns: block 90% and heal 15%.');
+sk('colossus', 'Colossus', ['tank'], 35, 3, 6, 'hit', { mult: 2.6, status: { stun: 1 }, cd: 5 }, 'Cooldown 5 turns: slam and stun.');
 // ranged
 sk('aimedshot', 'Aimed Shot', ['ranged'], 1, 2, 3, 'hit', { mult: 2.0, pierce: true }, 'Ignores enemy defense.');
 sk('volley', 'Volley', ['ranged'], 1, 2, 4, 'aoe', { mult: 0.85 }, 'Arrows rain on every enemy.');
@@ -41,7 +41,7 @@ sk('multishot', 'Multishot', ['ranged'], 10, 2, 4, 'hit', { mult: 0.7, hits: 3, 
 sk('explosivearrow', 'Explosive Arrow', ['ranged'], 15, 2, 5, 'aoe', { mult: 1.1, status: { burn: 3 } }, 'Burns every enemy.');
 sk('headshot', 'Headshot', ['ranged'], 20, 2, 5, 'hit', { mult: 2.7, pierce: true, combo: true }, 'Auto-crit against afflicted targets.');
 sk('rainofarrows', 'Rain of Arrows', ['ranged'], 28, 3, 6, 'aoe', { mult: 0.9, hits: 2 }, 'Two volleys on every enemy.');
-sk('deadeye', 'Deadeye', ['ranged'], 35, 3, 7, 'hit', { mult: 5.2, pierce: true, once: true }, 'Once per fight: a perfect shot.');
+sk('deadeye', 'Deadeye', ['ranged'], 35, 3, 7, 'hit', { mult: 5.2, pierce: true, cd: 5 }, 'Cooldown 5 turns: a perfect shot.');
 // rogue
 sk('backstab', 'Backstab', ['rogue'], 1, 2, 3, 'hit', { mult: 1.5, combo: true }, 'Auto-crit and +50% vs afflicted enemies.');
 sk('poisonblade', 'Poison Blade', ['rogue'], 1, 1, 2, 'hit', { mult: 0.8, status: { poison: 4 } }, 'Poisons the target.');
@@ -51,7 +51,7 @@ sk('eviscerate', 'Eviscerate', ['rogue'], 10, 2, 4, 'hit', { mult: 2.2, execute:
 sk('smokebomb', 'Smoke Bomb', ['rogue'], 15, 2, 3, 'guard', { block: 0.6, allStatus: { chill: 1 } }, 'Block 60% and blind the enemies.');
 sk('assassinate', 'Assassinate', ['rogue'], 20, 2, 5, 'hit', { mult: 3.3, combo: true }, 'Devastating against afflicted targets.');
 sk('deathblossom', 'Death Blossom', ['rogue'], 28, 3, 6, 'aoe', { mult: 1.8 }, 'A storm of blades.');
-sk('shadowdance', 'Shadow Dance', ['rogue'], 35, 3, 7, 'hit', { mult: 0.85, hits: 5, random: true, once: true }, 'Once per fight: five rapid strikes.');
+sk('shadowdance', 'Shadow Dance', ['rogue'], 35, 3, 7, 'hit', { mult: 0.85, hits: 5, random: true, cd: 5 }, 'Cooldown 5 turns: five rapid strikes.');
 // magic
 sk('fireball', 'Fireball', ['magic'], 1, 2, 4, 'hit', { mult: 1.8, status: { burn: 3 } }, 'Burns the target.');
 sk('frostbolt', 'Frost Bolt', ['magic'], 1, 2, 3, 'hit', { mult: 1.3, status: { chill: 2 } }, 'Chills: target deals 40% less damage.');
@@ -61,17 +61,17 @@ sk('manashield', 'Mana Shield', ['magic'], 10, 1, 3, 'guard', { block: 0.6, refu
 sk('meteor', 'Meteor', ['magic'], 15, 3, 6, 'aoe', { mult: 1.9, status: { burn: 3 } }, 'Fire from the sky.');
 sk('blizzard', 'Blizzard', ['magic'], 20, 2, 5, 'aoe', { mult: 1.2, status: { chill: 2 } }, 'Freezing storm.');
 sk('arcaneblast', 'Arcane Blast', ['magic'], 28, 3, 7, 'hit', { mult: 3.8, pierce: true }, 'Raw magical force.');
-sk('cataclysm', 'Cataclysm', ['magic'], 35, 3, 8, 'aoe', { mult: 3.0, once: true }, 'Once per fight: devastate the room.');
+sk('cataclysm', 'Cataclysm', ['magic'], 35, 3, 8, 'aoe', { mult: 3.0, cd: 5 }, 'Cooldown 5 turns: devastate the room.');
 // support
 sk('smite', 'Smite', ['support'], 1, 2, 3, 'hit', { mult: 1.5 }, 'Holy damage.');
 sk('heal', 'Healing Light', ['support'], 1, 2, 4, 'heal', { pct: 0.3 }, 'Restore 30% max HP.');
 sk('blessing', 'Blessing', ['support'], 3, 1, 3, 'buff', { buff: { dmg: 0.2, turns: 3 }, pct: 0.1 }, '+20% damage for 3 turns and heal 10%.');
 sk('holynova', 'Holy Nova', ['support'], 6, 2, 4, 'aoe', { mult: 0.8, pct: 0.1 }, 'Damage all enemies and heal 10%.');
 sk('purify', 'Purify', ['support'], 10, 1, 3, 'cleanse', { pct: 0.15 }, 'Remove all afflictions and heal 15%.');
-sk('divineshield', 'Divine Shield', ['support'], 15, 2, 4, 'guard', { block: 0.9, once: true }, 'Once per fight: take 90% less damage.');
+sk('divineshield', 'Divine Shield', ['support'], 15, 2, 4, 'guard', { block: 0.9, cd: 4 }, 'Cooldown 4 turns: take 90% less damage.');
 sk('radiance', 'Radiance', ['support'], 20, 2, 5, 'aoe', { mult: 1.4, status: { weaken: 2 } }, 'Burning light weakens all enemies.');
-sk('revive', 'Rebirth', ['support'], 28, 2, 6, 'heal', { pct: 0.6, once: true }, 'Once per fight: restore 60% max HP.');
-sk('divinelight', 'Judgement of Light', ['support'], 35, 3, 7, 'hit', { mult: 3.6, pct: 0.2, once: true }, 'Once per fight: smite and heal 20%.');
+sk('revive', 'Rebirth', ['support'], 28, 2, 6, 'heal', { pct: 0.6, cd: 4 }, 'Cooldown 4 turns: restore 60% max HP.');
+sk('divinelight', 'Judgement of Light', ['support'], 35, 3, 7, 'hit', { mult: 3.6, pct: 0.2, cd: 5 }, 'Cooldown 5 turns: smite and heal 20%.');
 // hybrid
 sk('manablade', 'Mana Blade', ['hybrid'], 1, 2, 3, 'hit', { mult: 1.7, status: { burn: 2 } }, 'Magic-charged strike that burns.');
 sk('arcaneguard', 'Arcane Guard', ['hybrid'], 1, 1, 2, 'guard', { block: 0.5, refund: 2 }, 'Block 50% and recover 2 energy.');
@@ -79,9 +79,9 @@ sk('flameslash', 'Flame Slash', ['hybrid'], 3, 2, 3, 'hit', { mult: 1.7, status:
 sk('runeward', 'Rune Ward', ['hybrid'], 6, 1, 2, 'guard', { block: 0.5, buff: { dmg: 0.15, turns: 2 } }, 'Block 50% and +15% damage for 2 turns.');
 sk('spellstrike', 'Spellstrike', ['hybrid'], 10, 2, 4, 'hit', { mult: 2.3, pierce: true }, 'Armor-piercing spell blade.');
 sk('bladenova', 'Blade Nova', ['hybrid'], 15, 3, 5, 'aoe', { mult: 1.4 }, 'A ring of blades.');
-sk('arcanesurge', 'Arcane Surge', ['hybrid'], 20, 0, 0, 'focus', { gainAp: 2, refund: 4, once: true }, 'Once per fight: gain 2 AP and 4 energy.');
+sk('arcanesurge', 'Arcane Surge', ['hybrid'], 20, 0, 0, 'focus', { gainAp: 2, refund: 4, cd: 4 }, 'Cooldown 4 turns: gain 2 AP and 4 energy.');
 sk('fusion', 'Fusion Strike', ['hybrid'], 28, 3, 6, 'hit', { mult: 3.2, status: { burn: 3, chill: 2 } }, 'Fire and frost together.');
-sk('worldedge', 'World\'s Edge', ['hybrid'], 35, 3, 7, 'aoe', { mult: 2.6, once: true }, 'Once per fight: cut through everything.');
+sk('worldedge', 'World\'s Edge', ['hybrid'], 35, 3, 7, 'aoe', { mult: 2.6, cd: 5 }, 'Cooldown 5 turns: cut through everything.');
 // summon
 sk('spiritbolt', 'Spirit Bolt', ['summon'], 1, 2, 3, 'hit', { mult: 1.6 }, 'A bolt from your bound spirit.');
 sk('poisoncloud', 'Poison Cloud', ['summon'], 1, 2, 4, 'aoe', { mult: 0.5, status: { poison: 4 } }, 'Poison every enemy.');
@@ -91,9 +91,9 @@ sk('soulleech', 'Soul Leech', ['summon'], 10, 2, 4, 'hit', { mult: 1.5, drain: 0
 sk('horde', 'Spirit Horde', ['summon'], 15, 2, 5, 'summon', { spirit: { turns: 4, pct: 0.75 } }, 'A stronger spirit for 4 turns.');
 sk('deathcoil', 'Death Coil', ['summon'], 20, 2, 5, 'hit', { mult: 2.3, drain: 0.5 }, 'Lifedraining blast.');
 sk('plague', 'Plague', ['summon'], 28, 3, 6, 'aoe', { mult: 0.8, status: { poison: 6, bleed: 4 } }, 'Spread poison and bleeding.');
-sk('legion', 'Legion', ['summon'], 35, 3, 7, 'summon', { spirit: { turns: 5, pct: 1.1 }, once: true }, 'Once per fight: an army of spirits.');
+sk('legion', 'Legion', ['summon'], 35, 3, 7, 'summon', { spirit: { turns: 5, pct: 1.1 }, cd: 5 }, 'Cooldown 5 turns: an army of spirits.');
 // universal (learned from books)
-sk('secondwind', 'Second Wind', ['book'], 1, 2, 0, 'heal', { pct: 0.25, once: true }, 'Once per fight: heal 25% max HP.');
+sk('secondwind', 'Second Wind', ['book'], 1, 2, 0, 'heal', { pct: 0.25, cd: 4 }, 'Cooldown 4 turns: heal 25% max HP.');
 sk('focus', 'Focus', ['book'], 1, 1, 0, 'focus', { refund: 5 }, 'Regain 5 energy.');
 sk('throwingknife', 'Throwing Knife', ['book'], 1, 1, 1, 'hit', { mult: 0.95, pierce: true }, 'A cheap piercing throw.');
 sk('meditate', 'Meditate', ['book'], 1, 2, 0, 'focus', { refund: 8, pct: 0.1 }, 'Regain 8 energy and heal 10%.');
@@ -131,28 +131,28 @@ sk('spiritward', 'Spirit Ward', ['summon'], 8, 1, 3, 'guard', { block: 0.3, parr
 const X = (id, name, kind, minTier, lvl, ap, en, type, props, desc) => sk(id, name, [kind], lvl, ap, en, type, Object.assign({ minTier, exclusive: true }, props), desc);
 X('warcleave', 'Warcry Cleave', 'melee', 'E', 10, 2, 3, 'aoe', { mult: 1.5, status: { weaken: 2 } }, 'Sweeps every enemy and weakens them.');
 X('bladestorm', 'Bladestorm', 'melee', 'L', 18, 3, 5, 'aoe', { mult: 1.4, hits: 2 }, 'Two sweeps across the whole room.');
-X('titanwrath', 'Titan\'s Wrath', 'melee', 'M', 26, 3, 6, 'hit', { mult: 6.0, pierce: true, once: true }, 'Once per fight: a blow that ignores armor.');
+X('titanwrath', 'Titan\'s Wrath', 'melee', 'M', 26, 3, 6, 'hit', { mult: 6.0, pierce: true, cd: 5 }, 'Cooldown 5 turns: a blow that ignores armor.');
 X('shieldbash', 'Shield Bash', 'tank', 'E', 10, 2, 3, 'hit', { mult: 1.6, status: { weaken: 3 } }, 'A heavy bash that weakens.');
 X('aegisslam', 'Aegis Slam', 'tank', 'L', 18, 2, 4, 'hit', { mult: 2.6, status: { weaken: 3 }, block: 0.3 }, 'Crushing slam while you stay braced.');
-X('bastion', 'Immortal Bastion', 'tank', 'M', 26, 2, 5, 'guard', { block: 0.95, pct: 0.25, once: true }, 'Once per fight: take 95% less damage and heal 25%.');
+X('bastion', 'Immortal Bastion', 'tank', 'M', 26, 2, 5, 'guard', { block: 0.95, pct: 0.25, cd: 4 }, 'Cooldown 4 turns: take 95% less damage and heal 25%.');
 X('piercevolley', 'Piercing Volley', 'ranged', 'E', 10, 2, 4, 'hit', { mult: 0.8, hits: 3, random: true, pierce: true }, 'Three armor-piercing shots.');
 X('huntersmark', 'Hunter\'s Mark', 'ranged', 'L', 18, 2, 4, 'hit', { mult: 2.0, status: { bleed: 4 }, combo: true }, 'Marks the prey: bleeds, crits afflicted foes.');
-X('starfall', 'Starfall Barrage', 'ranged', 'M', 26, 3, 7, 'aoe', { mult: 2.2, hits: 2, once: true }, 'Once per fight: a rain of falling stars.');
+X('starfall', 'Starfall Barrage', 'ranged', 'M', 26, 3, 7, 'aoe', { mult: 2.2, hits: 2, cd: 5 }, 'Cooldown 5 turns: a rain of falling stars.');
 X('venomflurry', 'Venom Flurry', 'rogue', 'E', 10, 2, 3, 'hit', { mult: 0.6, hits: 4, random: true, status: { poison: 2 } }, 'Four poisoned cuts.');
 X('vanish', 'Vanish', 'rogue', 'L', 18, 1, 3, 'buff', { buff: { evade: 0.6, dmg: 0.4, turns: 2 } }, '+60% evasion and +40% damage for 2 turns.');
-X('thousandcuts', 'Thousand Cuts', 'rogue', 'M', 26, 3, 7, 'hit', { mult: 0.7, hits: 8, random: true, once: true }, 'Once per fight: eight blinding strikes.');
-X('manasurge', 'Mana Surge', 'magic', 'E', 10, 0, 0, 'focus', { gainAp: 1, refund: 5, once: true }, 'Once per fight: gain 1 AP and 5 energy.');
+X('thousandcuts', 'Thousand Cuts', 'rogue', 'M', 26, 3, 7, 'hit', { mult: 0.7, hits: 8, random: true, cd: 5 }, 'Cooldown 5 turns: eight blinding strikes.');
+X('manasurge', 'Mana Surge', 'magic', 'E', 10, 0, 0, 'focus', { gainAp: 1, refund: 5, cd: 4 }, 'Cooldown 4 turns: gain 1 AP and 5 energy.');
 X('prismray', 'Prismatic Ray', 'magic', 'L', 18, 2, 6, 'hit', { mult: 3.0, pierce: true, status: { burn: 2, chill: 2 } }, 'A piercing ray of fire and frost.');
-X('annihilate', 'Arcane Annihilation', 'magic', 'M', 26, 3, 8, 'aoe', { mult: 4.0, pierce: true, once: true }, 'Once per fight: unmake the room.');
+X('annihilate', 'Arcane Annihilation', 'magic', 'M', 26, 3, 8, 'aoe', { mult: 4.0, pierce: true, cd: 5 }, 'Cooldown 5 turns: unmake the room.');
 X('mendwave', 'Mending Wave', 'support', 'E', 10, 2, 4, 'heal', { pct: 0.45 }, 'Restore 45% max HP.');
 X('sanctward', 'Sanctified Ward', 'support', 'L', 18, 1, 4, 'guard', { block: 0.7, pct: 0.2 }, 'Block 70% and heal 20%.');
-X('miracle', 'Miracle', 'support', 'M', 26, 2, 6, 'heal', { pct: 0.9, once: true }, 'Once per fight: restore 90% max HP.');
+X('miracle', 'Miracle', 'support', 'M', 26, 2, 6, 'heal', { pct: 0.9, cd: 4 }, 'Cooldown 4 turns: restore 90% max HP.');
 X('runebarrage', 'Runic Barrage', 'hybrid', 'E', 10, 2, 4, 'hit', { mult: 1.0, hits: 3, random: true, status: { burn: 1 } }, 'Three runed strikes.');
 X('elementrift', 'Elemental Rift', 'hybrid', 'L', 18, 3, 6, 'aoe', { mult: 2.0, status: { burn: 3, chill: 2 } }, 'Tear open fire and frost on every enemy.');
-X('ascendantedge', 'Ascendant Edge', 'hybrid', 'M', 26, 3, 7, 'hit', { mult: 5.5, pierce: true, once: true }, 'Once per fight: a blade of pure force.');
+X('ascendantedge', 'Ascendant Edge', 'hybrid', 'M', 26, 3, 7, 'hit', { mult: 5.5, pierce: true, cd: 5 }, 'Cooldown 5 turns: a blade of pure force.');
 X('familiarpack', 'Familiar Pack', 'summon', 'E', 10, 2, 5, 'summon', { spirit: { turns: 4, pct: 0.6 } }, 'A pack of familiars fights for 4 turns.');
 X('soulharvest', 'Soul Harvest', 'summon', 'L', 18, 2, 5, 'hit', { mult: 2.6, drain: 0.7 }, 'Reap a soul and heal for 70% of the damage.');
-X('deadarmy', 'Army of the Dead', 'summon', 'M', 26, 3, 8, 'summon', { spirit: { turns: 6, pct: 1.5 }, once: true }, 'Once per fight: the dead rise to serve you.');
+X('deadarmy', 'Army of the Dead', 'summon', 'M', 26, 3, 8, 'summon', { spirit: { turns: 6, pct: 1.5 }, cd: 5 }, 'Cooldown 5 turns: the dead rise to serve you.');
 
 const KIND_SKILL_LIST = {};
 for (const k of ['melee', 'tank', 'ranged', 'rogue', 'magic', 'support', 'hybrid', 'summon']) {

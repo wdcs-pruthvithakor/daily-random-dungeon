@@ -27,6 +27,8 @@ const gearScore = x => !x ? -1 : (x.atk || 0) * 2 + (x.def || 0) * 2 + (x.en || 
 function manage(run) {
   while (run.char.points > 0) E.allocate(run, FOCUS(run.char));
   E.autoSkills(run.char);
+  if (!process.env.NOTREE && !globalThis.__noTree) E.autoTree(run.char);
+  if (process.env.OPT) E.optimizeLoadout(run.char);
   for (const it of run.inv.slice()) if (gearScore(it) > gearScore(run.equip[it.slot])) E.equipItem(run, it.id);
 }
 function useCons(run) {
@@ -48,8 +50,17 @@ function fight(run) {
         if (ids.includes('heal') && !E.canUse(run, 'heal') && E.act(run, 'heal', 0).ok) { acted = true; continue; }
       }
       if (enemies.length >= 2 && run.cons.fire_bomb && run.combat.ap >= 1 && E.useConsumable(run, 'fire_bomb').ok) { acted = true; continue; }
-      const order = ids.filter(i => !['guard', 'attack', 'heal', 'fortify', 'arcaneguard', 'ironskin', 'bulwark', 'manashield', 'runeward', 'counter', 'divineshield', 'unbreakable', 'smokebomb', 'secondwind', 'focus', 'meditate', 'rally', 'warcry', 'shadowstep', 'blessing', 'purify', 'revive', 'arcanesurge'].includes(i))
-        .sort((a, b) => (E.SKILLS[b].mult || 0) * (E.SKILLS[b].hits || 1) * (E.SKILLS[b].type === 'aoe' ? enemies.length : 1) - (E.SKILLS[a].mult || 0) * (E.SKILLS[a].hits || 1) * (E.SKILLS[a].type === 'aoe' ? enemies.length : 1));
+      const sks = ids.map(id => [id, E.effSkill(run.char, id)]);
+      if (run.hp < run.d.maxHp * 0.5) {
+        const hl = sks.find(([id, k]) => (k.type === 'heal' || k.type === 'cleanse') && !E.canUse(run, id));
+        if (hl && E.act(run, hl[0], 0).ok) { acted = true; continue; }
+      }
+      if (run.hp < run.d.maxHp * 0.4) {
+        const gd = sks.find(([id, k]) => k.type === 'guard' && id !== 'guard' && !E.canUse(run, id));
+        if (gd && E.act(run, gd[0], 0).ok) { acted = true; continue; }
+      }
+      const val = k => k.type === 'summon' ? k.spirit.pct * k.spirit.turns * 2.2 : (k.mult || 0) * (k.hits || 1) * (k.type === 'aoe' ? enemies.length : 1) + (k.status ? 0.15 : 0);
+      const order = sks.filter(([id, k]) => id !== 'attack' && ['hit', 'aoe', 'summon'].includes(k.type)).sort((x, y) => val(y[1]) - val(x[1])).map(x => x[0]);
       const t = enemies.slice().sort((a, b) => a.hp - b.hp)[0];
       const ti = run.combat.enemies.indexOf(t);
       for (const id of order.concat(['attack'])) {
@@ -251,4 +262,30 @@ function worldSim() {
   console.log('  level at step: ' + Object.keys(agg.lvlAt).map(k => `${k}: ${(agg.lvlAt[k] / C).toFixed(1)}`).join(', '));
 }
 
-if (mode === 'rolls') rolls(); else if (mode === 'bot') bot(); else if (mode === 'world') worldSim(); else careerSim();
+// Skill tree benchmark: the same heroes at the recommended level, with and without tree points spent.
+function treeSim() {
+  const ranks = (process.env.RANKS || 'E,D,C,B,A').split(',');
+  for (const rank of ranks) {
+    const rec = E.RANKS[rank].rec, res = { off: { w: 0, n: 0 }, on: { w: 0, n: 0 } }, byKind = {};
+    for (let i = 0; i < N; i++) {
+      for (const mode2 of ['off', 'on']) {
+        const rng = new E.RNG(`tb|${rank}|${i}`); let c = E.makeCharacter(rng); if (process.env.KIND) { let g = 0; while (E.PROF_BY[c.prof].kind !== process.env.KIND && g++ < 400) c = E.makeCharacter(rng); }
+        const career = E.careerStart(c); const ch = career.char;
+        ch.level = rec + (+process.env.DELTA || 0); ch.points = ch.ppl * (ch.level - 1); ch.skillPts = ch.level - 1 + Math.floor(ch.level / 5);
+        const grng = new E.RNG(`tbg|${rank}|${i}`);
+        for (const slot of E.SLOTS) { const it = E.genItem(grng, { heat: 2, luck: 3, rankMul: Math.pow(E.RANKS[rank].cs, 0.5), minRarity: 1, slot }); if (it && it.slot === slot) career.equip[slot] = it; }
+        const hub = E.careerHub(career); hub.char = career.char;
+        while (hub.char.points > 0) E.allocate(hub, FOCUS(hub.char));
+        globalThis.__noTree = mode2 === 'off'; E.autoSkills(hub.char); if (mode2 === 'on') E.autoTree(hub.char); E.optimizeLoadout(hub.char);
+        career.char = hub.char;
+        const run = E.careerNewRun(career, { free: true, seed: `tb|${rank}|${i}`, rank });
+        const r = playRun(run);
+        res[mode2].n++; res[mode2].w += r.win ? 1 : 0;
+        const k = E.PROF_BY[c.prof].kind; const b = (byKind[k] = byKind[k] || { off: [0, 0], on: [0, 0] }); b[mode2][0] += r.win ? 1 : 0; b[mode2][1]++;
+      }
+    }
+    console.log(`Rank ${rank} (lvl ${rec + (+process.env.DELTA || 0)}): without tree ${(res.off.w / res.off.n * 100).toFixed(1)}%  with tree ${(res.on.w / res.on.n * 100).toFixed(1)}%`);
+    console.log('   by kind (off -> on): ' + Object.entries(byKind).map(([k, v]) => `${k} ${(v.off[0] / v.off[1] * 100).toFixed(0)}->${(v.on[0] / v.on[1] * 100).toFixed(0)}`).join(' | '));
+  }
+}
+if (mode === 'tree') treeSim(); else if (mode === 'rolls') rolls(); else if (mode === 'bot') bot(); else if (mode === 'world') worldSim(); else careerSim();

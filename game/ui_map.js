@@ -10,13 +10,14 @@ function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 const SPRITES = [['🌳', '🌲', '🌾'], ['🌲', '🌳', '🍄'], ['⛰️', '🌾', '🪨'], ['🏔️', '🪨', '⛰️'], ['❄️', '🌲', '🏔️'], ['🌋', '🪨', '🔥'], ['💀', '🌀', '🪨']];
-const RANK_COLOR = { F: '#7bd88f', E: '#6bc8ff', D: '#ffd36b', C: '#ff9b4a', B: '#ff6b6b', A: '#d66bff', S: '#ff4aa0' };
+const RANK_COLOR = { F: '#7bd88f', E: '#6bc8ff', D: '#ffd36b', C: '#ff9b4a', B: '#ff6b6b', A: '#d66bff', S: '#ff4aa0', X: '#e8f4ff', Z: '#ff2020' };
+const rcol = r => RANK_COLOR[r] || RANK_COLOR[r && r[0]] || '#fff';
 
 function stateOf(n) { return n.state; }
 function dangerOf(car, n) {
   if (!n.rank) return null;
-  const rec = E.RANKS[n.rank].rec, lvl = car.char.level;
-  return lvl < rec - 3 ? ['Deadly', 'var(--bad)'] : lvl < rec ? ['Dangerous', '#ff8a3d'] : lvl > rec + 5 ? ['Outleveled', 'var(--dim)'] : ['Suitable', 'var(--good)'];
+  const t = E.threatOf(car, n.rank);
+  return [t.label, t.color, `your power ${t.power} vs about ${t.need} expected here`];
 }
 
 // ---------- world map (canvas) ----------
@@ -150,7 +151,7 @@ function drawWorld() {
     g.textBaseline = 'alphabetic';
     if (!seen) {
       label(g, n.name, cx, py + TS + 11, '#fff');
-      if (n.rank) { g.fillStyle = '#14131f'; g.beginPath(); g.arc(cx + 11, cy - 11, 7, 0, 7); g.fill(); g.strokeStyle = RANK_COLOR[n.rank]; g.lineWidth = 1.6; g.stroke(); g.fillStyle = RANK_COLOR[n.rank]; g.font = '800 9px system-ui'; g.fillText(n.rank, cx + 11, cy - 8); }
+      if (n.rank) { g.fillStyle = '#14131f'; g.beginPath(); g.arc(cx + 11, cy - 11, 7, 0, 7); g.fill(); g.strokeStyle = rcol(n.rank); g.lineWidth = 1.6; g.stroke(); g.fillStyle = rcol(n.rank); g.font = '800 9px system-ui'; g.fillText(n.rank[0], cx + 11, cy - 8); }
       if (n.state === 'cleared') { g.font = '11px sans-serif'; g.fillText('✔️', cx - 12, cy - 8); }
       else if (n.kind === 'dungeon' && E.worldNodeLocked(car, n)) { g.font = '11px sans-serif'; g.fillText('🔒', cx - 12, cy - 8); }
       if (n.waystone) { g.font = '10px sans-serif'; g.fillText('✨', cx + 12, cy + 12); }
@@ -205,7 +206,7 @@ function describeTile(car, x, y) {
   const s = T.structAt(w.sid, x, y), n = s ? E.worldNode(car, s.id) : null;
   const clock = ['Dawn', 'Morning', 'Midday', 'Afternoon', 'Evening', 'Dusk', 'Night', 'Late night'][w.day % 8];
   const place = n && n.state !== 'hidden' ? ` · ${n.state === 'seen' ? 'something unknown' : n.name}` : '';
-  return `(${x}, ${y}) · ${T.BIOMES[t.b].name} · zone ${E.CAREER_RANKS[z]}${place}`;
+  return `(${x}, ${y}) · ${T.BIOMES[t.b].name} · zone ${T.zoneLabel(w.sid, x, y)}${place}`;
 }
 function updateInfo(car) {
   const w = E.worldOf(car), el = document.getElementById('mapinfo');
@@ -278,9 +279,9 @@ function questPanel(car) {
   const q = E.questInfo(car); if (!q) return '';
   const left = q.left >= 0 ? `${q.left} day${q.left === 1 ? '' : 's'} left` : '<span style="color:var(--bad)">late: half pay</span>';
   const hearts = q.kind === 'escort' ? ` · ${esc(q.parcel)} ${'❤️'.repeat(Math.max(0, q.hp))}${'🖤'.repeat(Math.max(0, 3 - q.hp))}` : '';
-  const verb = { courier: 'Deliver ' + q.parcel + ' to', escort: 'Escort ' + q.parcel + ' to', errand: 'Find what was lost at', slay: 'Clear out' }[q.kind || 'courier'];
+  const verb = { courier: 'Deliver ' + q.parcel + ' to', escort: 'Escort ' + q.parcel + ' to', errand: 'Find what was lost at', slay: 'Clear out', survey: 'Investigate' }[q.kind || 'courier'];
   const w = E.worldOf(car), here = w.x === q.to.x && w.y === q.to.y;
-  const note = q.kind === 'slay' ? 'Walk there, enter the lair and win.' : q.kind === 'escort' ? 'Walk the whole way. Bandits and beasts may ambush you on the road, and if your client is hurt too often they will not survive.' : 'Walk to it. A road ambush is possible on the way.';
+  const note = q.kind === 'survey' ? 'Walk there, enter and clear it to learn what it was. It is unrated and not balanced for you.' : q.kind === 'slay' ? 'Walk there, enter the lair and win.' : q.kind === 'escort' ? 'Walk the whole way. Bandits and beasts may ambush you on the road, and if your client is hurt too often they will not survive.' : 'Walk to it. A road ambush is possible on the way.';
   return `<div class="panel" style="border-color:#ffcb3d"><div class="row between"><div style="flex:1;min-width:230px"><h3>${q.k.icon} Current job: ${q.k.name}</h3>
     <div><b>${verb} ${esc(q.to.name)}</b></div>
     <div class="small"><span style="font-size:20px;color:var(--accent)">${q.arrow}</span> <b>${q.dist}</b> tiles to the <b>${q.dir}</b> · ${left}${hearts}</div>
@@ -298,11 +299,11 @@ function hereCard(car) {
   } else if (n.kind === 'dungeon') {
     const rk = E.RANKS[n.rank], th = D.THEMES.find(t => t.id === n.themeId), dg = dangerOf(car, n);
     const wd = n.warden ? E.WARDENS[n.warden] : null, lock = E.worldNodeLocked(car, n);
-    body = `<div class="small"><b>${n.rank}-rank</b> · ${esc(th.name)} · ${n.rooms || rk.rooms} rooms · boss <b>${esc(th.boss.name)}</b></div>
-      <div class="small"><span style="color:${dg[1]}">${dg[0]}</span> <span class="dim">· recommended level ${rk.rec}</span></div>
+    body = `<div class="small"><b>${rk.wild ? esc(E.rankLabel(n.rank)) + ' land' : n.rank + '-rank'}</b> · ${esc(th.name)} · ${n.rooms || rk.rooms} rooms · boss <b>${esc(th.boss.name)}</b></div>
+      <div class="small"><span style="color:${dg[1]}">${dg[0]}</span> <span class="dim">· ${dg[2]} · recommended level ${rk.rec}</span></div>
       ${wd ? `<div class="small" style="color:var(--accent)">${wd.icon} <b>${wd.name} boss:</b> ${esc(wd.desc)}</div>` : ''}
       <div class="small dim">${n.clears ? `Cleared ${n.clears}×. Replays pay normal loot and XP.` : 'First clear: gold, a gear drop, credits, reputation and a big XP bonus.'}</div>
-      <div class="small dim">Any hero may enter. Rank ${n.rank} only sets the recommended level and the danger.</div>`;
+      <div class="small dim">${rk.wild ? (n.rank[0] === 'Z' ? '<b style="color:#ff6060">Forbidden land.</b> No guild has ever mapped it and no rank applies. Nothing here is balanced for you; the rewards are the best in the world.' : 'Beyond the Guild\'s maps. No rank applies; the threat only grows with distance.') : 'Any hero may enter. Rank ' + n.rank + ' only sets the recommended level and the danger.'}</div>`;
     act = `<button class="primary big" data-act="mapenter" data-id="${n.id}">⚔️ Enter ${esc(n.name)}</button>`;
   } else {
     const wait = n.cd && w.day < n.cd;
@@ -310,7 +311,7 @@ function hereCard(car) {
     act = `<button class="primary" data-act="mapexplore" ${wait || (w.pending && !w.pending.res) ? 'disabled' : ''}>Explore here</button>`;
   }
   const way = n.waystone ? ' <span class="tag" style="color:#7bf0ff;border-color:#7bf0ff">🗿 attuned</span>' : '';
-  return `<div class="panel nodepanel"><h3>${poi.icon} ${esc(n.name)}${way}</h3><div class="small dim">${esc(Tr().BIOMES[n.biome].name)} · zone ${E.CAREER_RANKS[n.ring]}</div>${body}<div style="margin-top:10px">${act}</div></div>`;
+  return `<div class="panel nodepanel"><h3>${poi.icon} ${esc(n.name)}${way}</h3><div class="small dim">${esc(Tr().BIOMES[n.biome].name)} · zone ${Tr().zoneLabel(E.worldOf(car).sid, n.x, n.y)}</div>${body}<div style="margin-top:10px">${act}</div></div>`;
 }
 function nearbyPanel(car) {
   const w = E.worldOf(car);
@@ -320,7 +321,7 @@ function nearbyPanel(car) {
     const poi = E.WORLD.POI[n.sub], d = Math.round(Math.hypot(n.x - w.x, n.y - w.y)), dg = dangerOf(car, n);
     const wi = n.waystone ? E.warpInfo(car, n.id) : null, wpoor = wi && car.gold < wi.gold, wpend = w.pending && !w.pending.res;
     const warp = wi ? `<button class="tiny" data-act="mapwarp" data-id="${esc(n.id)}" ${wpoor || wpend ? 'disabled' : ''} title="Fast travel (${wi.free ? 'free' : wi.gold + 'g'}, ${wi.days} day${wi.days > 1 ? 's' : ''})">🗿 ${wi.free ? 'Travel' : wi.gold + 'g'}</button> ` : '';
-    return `<div class="item" style="--c:${n.kind === 'dungeon' ? '#ff8a3d' : '#8fd0ff'}"><div class="slot">${poi.icon}</div><div class="body"><b>${esc(n.name)}</b>${n.rank ? ` <span class="tag" style="color:${RANK_COLOR[n.rank]};border-color:${RANK_COLOR[n.rank]}">${n.rank}</span>` : ''}${n.state === 'cleared' ? ' <span class="tag">✔ cleared</span>' : ''}
+    return `<div class="item" style="--c:${n.kind === 'dungeon' ? '#ff8a3d' : '#8fd0ff'}"><div class="slot">${poi.icon}</div><div class="body"><b>${esc(n.name)}</b>${n.rank ? ` <span class="tag" style="color:${rcol(n.rank)};border-color:${rcol(n.rank)}">${E.RANKS[n.rank].wild ? E.RANKS[n.rank].name + ' ' + E.RANKS[n.rank].tier : n.rank}</span>` : ''}${n.state === 'cleared' ? ' <span class="tag">✔ cleared</span>' : ''}
       <div class="small dim">${d} tiles · ${esc(Tr().BIOMES[n.biome].name)}${dg ? ` · <span style="color:${dg[1]}">${dg[0]}</span>` : ''}</div></div><div class="row">${warp}<button class="tiny" data-act="mapgo" data-x="${n.x}" data-y="${n.y}">Go</button></div></div>`;
   }).join('');
   return `<div class="panel"><h3>🧭 Places nearby</h3>${rows || '<p class="small dim">Nothing spotted yet. Walk out and explore, or scout.</p>'}</div>`;
@@ -378,7 +379,7 @@ UI.hubMap = function (car) {
   const seeds = `<span class="tag" title="Same seed, same world">🌱 ${esc(w.seed)}</span>`;
   const z = E.worldZone(w.x, w.y);
   const status = `<div class="panel mapbar"><div class="row between">
-    <div class="small"><b>Day ${w.day}</b> · Zone <b style="color:${RANK_COLOR[E.CAREER_RANKS[z]]}">${E.CAREER_RANKS[z]}</b> · ${seeds} <button class="tiny" data-act="mapcopy" title="Copy the world seed">Copy seed</button></div>
+    <div class="small"><b>Day ${w.day}</b> · Zone <b style="color:${rcol(Tr().wildOf(w.sid, w.x, w.y) || E.CAREER_RANKS[z])}">${Tr().zoneLabel(w.sid, w.x, w.y)}</b> · ${seeds} <button class="tiny" data-act="mapcopy" title="Copy the world seed">Copy seed</button></div>
     <div class="row"><button data-act="mapscout" ${pending ? 'disabled' : ''} title="Spend a day to survey the land and find hidden places">🔭 Scout (1 day)</button><button data-act="mappinhere" title="Drop a marker here">📍 Pin</button>${E.worldInTown(car) ? '<button data-act="hubtab" data-sub="town">🏰 Enter town</button>' : `<button data-act="mapreturn" ${pending ? 'disabled' : ''}>🏠 Return home</button>`}</div></div>
     <div class="small dim" style="margin-top:4px">Walk with <b>WASD / arrow keys</b>, the on-screen arrows, or <b>tap a tile</b> to auto-walk. Press and hold a tile to pin it; double-tap a waypoint to fast-travel there. Dark areas are unexplored. Danger grows with distance from Hearthhold (zones F to S). Every new place gives XP.</div></div>`;
   return `${status}${encounterPanel(car)}${questPanel(car)}<div class="mapwrap"><canvas id="worldcv" width="${VW * TS}" height="${VH * TS}"></canvas><div id="mapinfo" class="mapinfo"></div></div>
@@ -415,6 +416,7 @@ function academyPanel(car) {
   return `<div class="panel"><h3>🎓 Academy</h3><p class="small dim">The masters can undo your training or teach you more.</p>
     <div class="item" style="--c:#8fd0ff"><div class="slot">🔄</div><div class="body"><b>Respec stats</b><div class="small dim">Refunds the ${pts} stat point${pts === 1 ? '' : 's'} you have spent since the Academy began keeping records. Costs ${rc}g and rises each time.</div></div><button class="tiny" data-act="respec" ${pts && car.gold >= rc ? '' : 'disabled'}>${rc}g</button></div>
     <div class="item" style="--c:#ffe08a"><div class="slot">📖</div><div class="body"><b>Buy a lesson</b><div class="small dim">+1 skill point for ${lc} Guild Credits. You can learn ${cap - got} more lesson${cap - got === 1 ? '' : 's'} at your level (1 per 5 levels).</div></div><button class="tiny" data-act="lesson" ${got < cap && car.credits >= lc ? '' : 'disabled'}>${lc} cr</button></div>
+    <div class="item" style="--c:#7bd88f"><div class="slot">🌳</div><div class="body"><b>Unlearn the skill tree</b><div class="small dim">Refunds the ${E.treeSpent(c)} points you have spent in the tree and removes its skills. Costs ${E.treeResetCost(car)}g and rises each time.</div></div><button class="tiny" data-act="treereset" ${E.treeSpent(c) && car.gold >= E.treeResetCost(car) ? '' : 'disabled'}>${E.treeResetCost(car)}g</button></div>
     <p class="small dim">Credits: <b>${car.credits}</b></p></div>`;
 }
 function arenaPanel(car) { return UI.arenaPanel(car); }

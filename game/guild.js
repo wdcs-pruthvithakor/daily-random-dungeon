@@ -74,7 +74,7 @@ function rankTestStart(career) {
 // One travelling quest at a time lives in career.courier. It marks its destination on the map, may bring ambushes on the road,
 // and completes when you arrive (or, for "slay", when the lair is cleared).
 const SETTLE = ['village', 'town', 'capital', 'racehold'];
-const KINDS = { courier: { icon: '📦', name: 'Courier job' }, escort: { icon: '🧳', name: 'Escort' }, errand: { icon: '🔎', name: 'Errand' }, slay: { icon: '🐲', name: 'Hunt' } };
+const KINDS = { courier: { icon: '📦', name: 'Courier job' }, escort: { icon: '🧳', name: 'Escort' }, errand: { icon: '🔎', name: 'Errand' }, slay: { icon: '🐲', name: 'Hunt' }, survey: { icon: '🔭', name: 'Investigation' } };
 const CLIENT = ['a merchant', 'a pilgrim', 'a scholar', 'a young noble', 'a healer', 'a surveyor', 'a runaway apprentice', 'a travelling bard'];
 function dir8(dx, dy) {
   const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'], arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
@@ -85,6 +85,38 @@ function questInfo(career) {
   const q = career.courier; if (!q) return null;
   const w = E.worldOf(career), dx = q.to.x - w.x, dy = q.to.y - w.y, d = Math.hypot(dx, dy), dr = dir8(dx, dy);
   return Object.assign({}, q, { dist: Math.round(d), dir: dr.name, arrow: dr.arrow, left: q.due - w.day, k: KINDS[q.kind || 'courier'] });
+}
+
+// ---------- investigations: lore quests into the rankless lands ----------
+// The Guild never mapped the unranked and forbidden patches. Boards post investigations: go in, clear the place, and learn what it was.
+const LORE = {
+  X: [
+    ['The Green Lights', 'Herders swear green lights hang over {n} every night, and their flocks will not graze within sight of it.', 'Under {n} you find a ring of cracked beacon-stones. Someone long ago was signalling to something, and something answered.'],
+    ['The Vanished Caravan', 'A salt caravan went toward {n} and never came out. Its wagons were found a month later, perfectly clean and empty.', 'The caravan never died there. In {n} you find its goods stacked neatly in a vault, as if waiting for buyers who stopped being people.'],
+    ['The Walking Wall', 'Travellers near {n} describe a wall of grey stone that was not there the day before, and is further along the next day.', '{n} is a fortress on slow legs. Its builders bound a wall-spirit to carry them somewhere. It is still walking, and the builders are still inside.'],
+    ['The Quiet Village', 'Everyone in a hamlet beyond {n} stopped talking one winter. A trader says they still smile and wave.', 'The villagers traded their voices for something under {n}. The bargain is written on the walls in a script you almost understand.'],
+    ['The Second Sun', 'At dusk, {n} glows as though the sun set there twice. Birds fall out of the sky nearby.', 'Deep in {n} sits a star-shard the size of a house. The old kingdoms mined it for fuel and then forgot why they stopped.'],
+  ],
+  Z: [
+    ['The Mapmakers Who Did Not Return', 'The Guild sent three survey parties to {n}. None came back, but their maps did: blank, except for one circle.', 'The surveyors are still in {n}. They did not die; they are stood in a circle, mapping a place that keeps redrawing itself around them.'],
+    ['The Sealed Door', 'Old records say a kingdom sealed {n} behind a door with no handle and a single word carved above it: WAIT.', '{n} was not sealed to keep something in. It was sealed to keep something young. You have, unfortunately, opened the door.'],
+    ['The Hungry Map', 'Scouts who sketch {n} find the ink on their charts has crept toward it by morning, as if the page were hungry.', 'The land around {n} is thinning. Whatever sleeps under it is eating the world\'s edges, slowly, like a tide.'],
+    ['The Crown Without a King', 'Bards name {n} as the grave of the last king of a people no one remembers. They say his crown still rules.', 'The crown of {n} rules a court of the dead, and the court has been waiting for a living heir. Your arrival caused a stir.'],
+    ['The Place That Remembers You', 'A guild scribe wrote in her last letter that {n} knew her name before she told it.', '{n} reads memory the way a river reads stone. Everything it learned about you is now written somewhere on its walls, and some of it is not yet true.'],
+  ],
+};
+function surveyOffers(career, place, here, rng, n) {
+  const w = E.worldOf(career);
+  const cands = T.structuresIn(w.sid, here.x - 170, here.y - 170, here.x + 170, here.y + 170).filter(s => s.kind === 'dungeon' && s.wild && Math.hypot(s.x - here.x, s.y - here.y) > 15);
+  const out = [];
+  for (let k = 0; k < n && cands.length; k++) {
+    const s = cands.splice(rng.int(0, cands.length - 1), 1)[0], dist = Math.round(Math.hypot(s.x - here.x, s.y - here.y)), rk = RANKS[s.rank];
+    const lore = LORE[s.rank[0]][rng.int(0, LORE[s.rank[0]].length - 1)];
+    out.push({ id: `${place.id}:${career.boardN}:v${k}`, kind: 'survey', to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 6) + 10,
+      gold: Math.round(26 * rk.rewards), credits: 4 + Math.ceil(rk.tier / 2), rep: 4 + Math.ceil(rk.tier / 3), xpFrac: 0.3, rank: s.rank, from: place.name,
+      parcel: lore[0], hook: lore[1].replace(/\{n\}/g, s.name), reveal: lore[2].replace(/\{n\}/g, s.name) });
+  }
+  return out;
 }
 function courierOffers(career) {
   const place = guildPlace(career); if (!place) return [];
@@ -107,6 +139,9 @@ function courierOffers(career) {
     out.push({ id: `${place.id}:${career.boardN}:e${k}`, kind: 'escort', to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 6) + 5, hp: 3,
       gold: Math.round((60 + dist * 2.2) * (1 + 0.3 * z)), credits: 2 + z, rep: 2 + Math.floor(dist / 30), from: place.name, parcel: who });
   }
+  // investigations into the rankless lands, when there are any within reach
+  const nv = place.kind === 'capital' ? 2 : place.kind === 'town' ? 1 : (rng.chance(0.3) ? 1 : 0);
+  if (nv) for (const o of surveyOffers(career, place, here, rng, nv)) out.push(o);
   return out;
 }
 function questMarker(career, q) {
@@ -140,16 +175,26 @@ function questPay(career, c, late, lines, where) {
   if (c.xpFrac) { const hub = E.careerHub(career), amt = Math.round(E.xpNeeded(career.char.level, true) * c.xpFrac); if (amt) { E.addXp(hub, amt); career.char = hub.char; lines.push(`+${amt} XP.`); } }
   const k = c.kind || 'courier';
   const alive = k === 'escort' ? (c.hp > 0) : true;
-  lines.push(late ? `You complete the job at ${where}, but you are late. Half pay: ${g} gold.` : k === 'escort' ? `You deliver ${c.parcel} safely to ${where}${c.hp < 3 ? ' (a bit battered)' : ''}! +${g} gold, +${cr} credits, +${rp} reputation.` : k === 'errand' ? `Errand done at ${where}! +${g} gold, +${cr} credits, +${rp} reputation.` : `Delivered ${c.parcel} to ${where}! +${g} gold, +${cr} credits, +${rp} reputation.`);
+  lines.push(late ? `You complete the job at ${where}, but you are late. Half pay: ${g} gold.` : k === 'escort' ? `You deliver ${c.parcel} safely to ${where}${c.hp < 3 ? ' (a bit battered)' : ''}! +${g} gold, +${cr} credits, +${rp} reputation.` : k === 'survey' ? `Investigation complete at ${where}! +${g} gold, +${cr} credits, +${rp} reputation.` : k === 'errand' ? `Errand done at ${where}! +${g} gold, +${cr} credits, +${rp} reputation.` : `Delivered ${c.parcel} to ${where}! +${g} gold, +${cr} credits, +${rp} reputation.`);
   void alive; clearQuest(career);
 }
 function courierArrive(career, node, lines) {
-  const c = career.courier; if (!c || c.to.id !== node.id || c.kind === 'slay') return;
+  const c = career.courier; if (!c || c.to.id !== node.id || c.kind === 'slay' || c.kind === 'survey') return;
   questPay(career, c, E.worldOf(career).day > c.due, lines, node.name);
 }
 // A lair or dungeon cleared for a "slay" quest.
 function questNodeCleared(career, nodeId, lines) {
-  const c = career.courier; if (!c || c.kind !== 'slay' || c.to.id !== nodeId) return;
+  const c = career.courier; if (!c || (c.kind !== 'slay' && c.kind !== 'survey') || c.to.id !== nodeId) return;
+  if (c.kind === 'survey') {
+    // the lore is the point: it is written into the journal, and the place teaches the one who cleared it
+    career.lore = career.lore || [];
+    career.lore.push({ title: c.parcel, text: c.reveal, place: c.to.name, rank: c.rank, day: E.worldOf(career).day });
+    lines.push(`📜 ${c.parcel}: ${c.reveal}`);
+    const rk = RANKS[c.rank], forb = c.rank[0] === 'Z', rr = new RNG(`survey|${career.wseed}|${c.to.id}|${career.runs}`), lk = career.char.luck || 0;
+    const tc = E.rollTechnique(rr, 6 + Math.floor(rk.tier / 3), lk, career.char, forb ? 3 : 1);
+    if (tc && E.grantTechnique(career.char, tc)) { const inf = E.techInfo(tc); lines.push(`The place teaches you ${inf.name} (${E.TIERS[tc.rarity].name}${tc.passive ? ', passive' : ''}).`); }
+    if (forb) { const nd = E.rollTreeKey(rr, 8 + Math.floor(rk.tier / 3), lk); if (E.grantTreeKey(career.char, nd)) lines.push(`A secret manual: ${E.TREE_BRANCH_BY[nd.branch].name}, tier ${nd.tier}.`); }
+  }
   questPay(career, c, false, lines, c.to.name);
 }
 // Strangers on the road ask for help. Returns an encounter or null.
@@ -218,13 +263,14 @@ function legendaryParties(career, place) {
 }
 // Hireable: a legendary party works only a few expeditions, but fights far harder than a common one.
 function legendaryOffers(career, place) {
-  const z = Math.min(place.zone, 6), rk = rankOf(z), COMP = Object.keys(D.COMPANIONS);
+  const z = Math.min(place.zone, 6), rk = rankOf(z), up = rankOf(z + 2), COMP = Object.keys(D.COMPANIONS);
   return legendaryParties(career, place).map((l, i) => {
     const rng = new RNG(`legendoffer|${l.id}`);
     const roles = COMP.slice(), members = [];
     for (let m = 0; m < 3; m++) { const r = roles.splice(rng.int(0, roles.length - 1), 1)[0]; members.push({ id: r, name: l.members[m].name + ' the ' + D.COMPANIONS[r].name }); }
-    return { id: l.id + ':hire', name: l.name, legendary: true, quote: l.quote, members, place: place.name, zone: rk, minLevel: RANKS[rk].rec + 2, needRuns: 8, stay: 2, total: 4, leavePay: Math.round(300 * (1 + 0.3 * z)),
-      lootMul: 0.52, xpMul: 0.6, shield: 0.22, pw: +(0.8 + 0.12 * z + 0.55).toFixed(2) };
+    // a legendary party is ranked two ranks above the area it works in, and fights at that level
+    return { id: l.id + ':hire', name: l.name, legendary: true, quote: l.quote, members, place: place.name, zone: rk, rank: up, level: RANKS[up].rec + 3, boost: 1.15, minLevel: RANKS[rk].rec + 2, needRuns: 8, stay: 2, total: 4, leavePay: Math.round(300 * (1 + 0.3 * z)),
+      lootMul: 0.52, xpMul: 0.6, shield: 0.3, pw: 1.6 };
   });
 }
 
@@ -395,6 +441,15 @@ function grandBuy(career, node, i) {
   return { ok: true, msg: `Bought ${it.name || 'an item'} for ${it.price}g.` };
 }
 
-Object.assign(E, { questInfo, questStart, questStep, strangerEvent, ambushEvent, worldAmbush, questNodeCleared, dir8, guildPlace, guildBoard, canTake, takeNote, rankTestInfo, rankTestStart, courierOffers, courierAccept, courierAbandon, courierArrive, legendaryParties, legendaryOffers,
+// How dangerous a rank is for this hero right now, by the hero's real power (gear and stats included) against the power a hero of the
+// recommended level would have. Unlike the plain level check it notices a hero who is under-geared or over-geared for their level.
+function threatOf(career, rankId) {
+  const rk = RANKS[rankId]; if (!rk) return null;
+  const power = E.careerHub(career).d.power, need = E.partyPower(rk.rec), ratio = power / need;
+  const [label, color] = ratio >= 1.6 ? ['Trivial', 'var(--dim)'] : ratio >= 1.15 ? ['Safe', 'var(--good)'] : ratio >= 0.75 ? ['Even match', 'var(--good)'] : ratio >= 0.55 ? ['Dangerous', '#ff8a3d'] : ratio >= 0.35 ? ['Very dangerous', 'var(--bad)'] : ['Deadly', 'var(--bad)'];
+  return { label, color, ratio, power: Math.round(power), need: Math.round(need) };
+}
+
+Object.assign(E, { threatOf, questInfo, questStart, questStep, strangerEvent, ambushEvent, worldAmbush, questNodeCleared, dir8, guildPlace, guildBoard, canTake, takeNote, rankTestInfo, rankTestStart, courierOffers, courierAccept, courierAbandon, courierArrive, legendaryParties, legendaryOffers,
   arenaPlace, arenaStatus, tourneyEnter, tourneyFight, tourneyWithdraw, tourneyPrize, guildAfterRun, palaceInfo, royalOffers, royalTake, royalDone, grandStock, grandBuy, AUDIENCE_REP });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

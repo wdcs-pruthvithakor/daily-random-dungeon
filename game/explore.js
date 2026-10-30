@@ -182,10 +182,12 @@ function makeEncounter(career, node, rng) {
     case 'shrine': return mk(node.name, '🕯️', 'A weathered altar, cold candles, and the feeling of being watched.', [
       { label: 'Pray (WIS)', check: { stat: 'WIS', dc: 0 }, win: { text: 'Warmth flows through you.', bless: true, xpFrac: 0.03 }, lose: { text: 'The shrine is silent.' } },
       { label: `Offer ${40 + ring * 30} gold`, cost: { gold: 40 + ring * 30 }, luckW: true, out: { rand: [[1, { text: 'A vision of your own potential.', stat: 1 }], [3, { text: 'A blessing and a gift.', bless: true, credits: 2 }], [6, { text: 'A faint warmth.', xpFrac: 0.04 }]] } },
+      { label: 'Kneel and seek a vision (WIL)', check: { stat: 'WIL', dc: 2 }, win: { text: 'The old gods show you a way of fighting that is not yours.', technique: true, techBoost: 1, xpFrac: 0.03 }, lose: { text: 'The vision slips away. You wake with a headache.', xpFrac: 0.01 } },
+      ...(E.subEligible(career.char) ? [{ label: 'Answer the altar\'s call (WIL)', check: { stat: 'WIL', dc: 3 }, win: { text: 'The candles flare. Something in you answers.', awaken: true, xpFrac: 0.04 }, lose: { text: 'The candles gutter. Not today.', xpFrac: 0.01 } }] : []),
       { label: 'Take the offerings (STR)', check: { stat: 'STR', dc: 1 }, win: { text: 'You pocket old coins and a relic.', gold: g(40, 70), relic: true }, lose: { text: 'A chill follows you. You drop some gold.', goldLossPct: 0.08 } }]);
     case 'ruins': return mk(node.name, '🏛️', 'Half-collapsed halls and glyph-covered walls.', [
       { label: 'Search the rubble (DEX)', check: { stat: 'DEX', dc: 0 }, win: { text: 'Beneath a slab you find something good.', item: { minRarity: 1 }, matsRandom: 2 }, lose: { text: 'You find scraps.', matsRandom: 1 } },
-      { label: 'Decipher the glyphs (INT)', check: { stat: 'INT', dc: 1 }, win: { text: 'A lost lesson, written in stone.', skillbook: true, xpFrac: 0.05 }, lose: { text: 'You make partial sense of it.', xpFrac: 0.015 } },
+      { label: 'Decipher the glyphs (INT)', check: { stat: 'INT', dc: 1 }, win: { text: 'A lost lesson, written in stone.', skillbook: true, xpFrac: 0.05, treekey: 0.35, technique: 0.3 }, lose: { text: 'You make partial sense of it.', xpFrac: 0.015 } },
       { label: 'Dig carefully (VIT)', check: { stat: 'VIT', dc: 0 }, win: { text: 'An unknown relic.', relic: true }, lose: { text: 'The dig yields nothing.' } }]);
     case 'grove': return mk(node.name, '🌿', 'Moss, herbs, and quiet bird calls.', [
       { label: 'Forage carefully (AGI)', check: { stat: 'AGI', dc: -1 }, win: { text: 'A bountiful harvest.', matsRandom: 4 + ring, consRandom: 1 }, lose: { text: 'Slim pickings.', matsRandom: 1 } },
@@ -201,11 +203,23 @@ function makeEncounter(career, node, rng) {
       { label: `Buy a mystery relic (${110 + ring * 40}g)`, cost: { gold: 110 + ring * 40 }, out: { text: 'Wrapped in cloth, humming faintly.', relic: true } },
       { label: 'Trade gossip (WIS)', check: { stat: 'WIS', dc: 0 }, win: { text: 'They pay for your stories.', gold: g(40, 80), reveal: 2 }, lose: { text: 'Nothing new.' } }], { cd: 10 });
     case 'hermit': {
-      const v = rng.int(0, 3);
+      const elig = E.subEligible(career.char), v = rng.chance(0.18) ? 4 : (elig && rng.chance(0.14)) ? 6 : rng.chance(0.12) ? 5 : rng.int(0, 3);
       if (v === 0) return mk('Veteran Hermit', '🧓', 'A scarred veteran tends a tiny fire.', [
         { label: `Study under them (${60 + ring * 40}g)`, cost: { gold: 60 + ring * 40 }, out: { text: 'Hard-won lessons.', skillpt: 1 } },
         { label: 'Share a meal', out: { text: 'Stories and stew.', xpFrac: 0.04, rep: 1 } },
         { label: 'Spar (STR)', check: { stat: 'STR', dc: 1 }, win: { text: 'They nod, impressed.', xpFrac: 0.06 }, lose: { text: 'You learn by getting hit.', xpFrac: 0.02 } }]);
+      if (v === 4) return mk('Wandering Master', '🥋', 'A quiet figure who has mastered more than one school. They look you over.', [
+        { label: `Beg for a lesson (${80 + ring * 50}g)`, cost: { gold: 80 + ring * 50 }, out: { text: 'They teach you something rare.', technique: true, techBoost: 1, xpFrac: 0.03 } },
+        { label: 'Spar to earn it (STR)', check: { stat: 'STR', dc: 1 }, win: { text: 'They smile: "You have earned this."', treekey: true, xpFrac: 0.05 }, lose: { text: 'They bow and walk on.', xpFrac: 0.02 } },
+        { label: 'Debate the old ways (INT)', check: { stat: 'INT', dc: 1 }, win: { text: 'They are impressed by your mind.', technique: true, techBoost: 1, treekey: 0.3 }, lose: { text: 'A pleasant but fruitless talk.', xpFrac: 0.02 } }]);
+      if (v === 6) return mk('Sage of Echoes', '🔮', 'A robed sage studies you as if reading a second shadow behind you. "There is another path in you," they say.', [
+        { label: `Pay for the rite (${250 + ring * 150}g)`, cost: { gold: 250 + ring * 150 }, out: { text: 'The rite wakes something that was always yours.', awaken: true, xpFrac: 0.03 } },
+        { label: 'Face the trial (WIL)', check: { stat: 'WIL', dc: 2 }, win: { text: 'You hold your ground while another self steps forward.', awaken: true, techBoost: 1, xpFrac: 0.05 }, lose: { text: 'The echo fades. The sage shakes their head.', xpFrac: 0.02 } },
+        { label: 'Walk away', out: { text: 'You leave. The sage does not follow.' } }]);
+      if (v === 5) return mk('Dying Champion', '⚔️', 'A battered champion leans against a tree, their last fight already lost.', [
+        { label: 'Stay with them (give 1 potion)', cost: { potion: 1 }, out: { text: 'They press their life\'s work into your hands.', technique: true, techBoost: 2, rep: 1 } },
+        { label: 'Honour their last duel (WIL)', check: { stat: 'WIL', dc: 1 }, win: { text: 'They give you everything they had.', technique: true, techBoost: 2, xpFrac: 0.03 }, lose: { text: 'You cannot find the strength.', xpFrac: 0.01 } },
+        { label: 'Take their gear', out: { text: 'It feels wrong, but it is good gear.', item: { minRarity: 2 }, rep: -1 } }]);
       if (v === 1) return mk('Wandering Smith', '🔨', 'A smith with a portable anvil.', [
         { label: 'Ask for a tune-up (free)', out: { text: 'They sharpen your weapon.', upgrade: true } },
         { label: 'Trade scrap (give 1 potion)', cost: { potion: 1 }, out: { text: 'They hand over spare parts.', matsRandom: 4 } }]);
@@ -220,7 +234,7 @@ function makeEncounter(career, node, rng) {
       { label: node.waystone ? 'Study the routes again' : 'Attune to the stone', out: { text: node.waystone ? 'The map in your mind sharpens.' : 'The stone answers. You can now travel between waystones in a day.', waystone: true, reveal: 3, xpFrac: 0.03 } }]);
     case 'vault': return mk(node.name, '💎', 'A sealed door, long forgotten.', [
       { label: 'Pick the lock (DEX)', check: { stat: 'DEX', dc: 1 }, win: { text: 'It opens.', item: { minRarity: 3 }, credits: 4 + ring, gold: g(80, 140) }, lose: { text: 'The lock holds, but you pry out a prize.', item: { minRarity: 2 } } },
-      { label: 'Study the runes (INT)', check: { stat: 'INT', dc: 1 }, win: { text: 'The runes yield a secret.', item: { minRarity: 3 }, skillpt: 1 }, lose: { text: 'A trap spits gold at you.', gold: g(40, 80) } }]);
+      { label: 'Study the runes (INT)', check: { stat: 'INT', dc: 1 }, win: { text: 'The runes yield a secret.', item: { minRarity: 3 }, skillpt: 1, treekey: 0.6, technique: 0.4 }, lose: { text: 'A trap spits gold at you.', gold: g(40, 80) } }]);
     default: return mk(node.name, '❔', 'Nothing here.', [{ label: 'Leave', out: { text: 'You move on.' } }]);
   }
 }
@@ -279,6 +293,23 @@ function applyOut(career, node, out, res, rng, ctx) {
   }
   if (out.cure) { if (career.char.injuries && career.char.injuries.length) { career.char.injuries = []; res.lines.push('Your injuries are healed.'); } }
   if (out.bless) { career.blessNext = true; res.lines.push('Blessed: +15% damage on your next expedition.'); }
+  if (out.treekey && rng.chance(out.treekey === true ? 1 : out.treekey)) {
+    const nd = E.rollTreeKey(rng, ring, ctx.luck);
+    if (E.grantTreeKey(career.char, nd)) res.lines.push(`You learn of a secret manual: ${E.TREE_BRANCH_BY[nd.branch].name}, tier ${nd.tier} (${nd.skill ? E.SKILLS[nd.skill].name : nd.name}). It can be learned from the Hero tab even though it is not your discipline.`);
+    else { career.char.skillPts += 1; res.lines.push('You already know that lore. +1 skill point.'); }
+  }
+  if (out.technique && rng.chance(out.technique === true ? 1 : out.technique)) {
+    const tc = E.rollTechnique(rng, ring, ctx.luck, career.char, out.techBoost);
+    if (tc && E.grantTechnique(career.char, tc)) {
+      const info = E.techInfo(tc), rl = E.TIERS[tc.rarity].name;
+      res.lines.push(tc.passive ? `You grasp a passive skill: ${info.name} (${rl}). ${info.desc}` : `You learn a technique: ${info.name} (${rl}${E.isForeign(career.char, tc.id) ? ', from another discipline' : ''}). It joins your skills${career.char.loadout.includes(tc.id) ? ' and is equipped' : ': equip it in the Hero tab'}.`);
+    } else { career.char.skillPts += 1; res.lines.push('You already know everything it could teach you. +1 skill point.'); }
+  }
+  if (out.awaken) {
+    const ch = career.char, sub = E.rollSub(rng, ring, ctx.luck, ch, out.techBoost);
+    if (sub && E.grantSub(ch, sub)) res.lines.push(`Second awakening! You are also a ${sub.prof} (${E.TIERS[E.TIER_BY[sub.tier]].name}). Its skills and skill tree are open to you now. Your main class, ${ch.prof}, still gives your signature skill, your slots and your power.`);
+    else res.lines.push('Nothing answers your call.');
+  }
   if (out.fight) res.fight = true;
   if (out.quest) { E.questStart(career, out.quest); res.lines.push(`New job: ${out.quest.parcel} → ${out.quest.to.name}.`); }
   if (out.waystone) node.waystone = true;
@@ -535,7 +566,13 @@ function worldAfterRun(career, run, outcome, res) {
       add(`First clear: ${node.name}`, node.sub === 'lair' ? 0.1 : 0.14);
       const it = genItem(new RNG(w.seed + '|first|' + node.id), { minRarity: Math.min(4, 1 + Math.floor(ring / 2) + (node.sub === 'lair' ? 1 : 0)), luck: 0, heat: 2 + ring, rankMul: Math.pow(RANKS[node.rank].cs, 0.5) });
       career.stash.push(it); res.banked.push(it);
-      res.firstClear = { name: node.name, gold: g, credits: 3 + ring * 2, rep: 3 + ring, item: it };
+      res.firstClear = { name: node.name, gold: g, credits: 3 + ring * 2, rep: 3 + ring, item: it };      // the far lands pay in knowledge: a technique and, in the forbidden lands, a secret manual as well
+      if (RANKS[node.rank].wild) {
+        const wr = new RNG(w.seed + '|wild|' + node.id), forb = node.rank[0] === 'Z', lk = career.char.luck || 0;
+        const tc = E.rollTechnique(wr, ring + (forb ? 4 : 2) + Math.floor(RANKS[node.rank].tier / 4), lk, career.char, 0);
+        if (tc && E.grantTechnique(career.char, tc)) { const inf = E.techInfo(tc); res.questLines.push(`${forb ? 'Forbidden knowledge' : 'Lost knowledge'}: you learn ${inf.name} (${E.TIERS[tc.rarity].name}${tc.passive ? ', passive' : ''}).`); }
+        if (forb) { const nd = E.rollTreeKey(wr, ring + 3, lk); if (E.grantTreeKey(career.char, nd)) res.questLines.push(`A secret manual lies in the ruin: ${E.TREE_BRANCH_BY[nd.branch].name}, tier ${nd.tier}.`); }
+      }
     }
   }
   // a fallen hero wakes up at the Guild; anyone else stays where the dungeon is, and the delve costs a day
@@ -613,7 +650,7 @@ function buyLesson(career) {
   return { ok: true, msg: 'The masters teach you something new. +1 skill point.' };
 }
 function worldRevealAt(career, x, y, r) { markView(worldOf(career), x, y, r); }
-Object.assign(E, { worldRevealAt, warpInfo, partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, worldMark, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
+Object.assign(E, { worldEncounter: (career, node, rng) => makeEncounter(career, node, rng), worldRevealAt, warpInfo, partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, worldMark, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
   worldKnown: knownNodes, worldNear: structsNear, worldAttuned: attuned, worldIsExplored: isEx, worldSight: sightOf, worldZone: zoneAt, randomSeedText,
   WORLD: { POI, SIGHT, ROAD }, nodeRank });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

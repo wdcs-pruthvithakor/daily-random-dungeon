@@ -121,7 +121,7 @@ UI.partyPanel = function (car) {
   let cur = '';
   if (p) {
     const fee = E.partyLeaveFee(car);
-    cur = `<div class="item" style="--c:#8fd0ff"><div class="slot">👥</div><div class="body"><b>${esc(p.name)}</b> <span class="dim small">(${p.left} expeditions left, ${p.done} done)</span><div>${mem(p.members)}</div>
+    cur = `<div class="item" style="--c:#8fd0ff"><div class="slot">👥</div><div class="body"><b>${esc(p.name)}</b>${p.legendary ? ' <span class="tag" style="color:#ffcb3d;border-color:#ffcb3d">LEGENDARY</span>' : ''} <span class="dim small">${p.level ? '· rank ' + p.rank + ' party, level ' + p.level + ' ' : ''}(${p.left} expeditions left, ${p.done} done)</span><div>${mem(p.members)}</div>
       <div class="small dim">Takes ${pct(p.lootMul)} of gold and drops, ${pct(p.xpMul)} of XP. Absorbs about ${Math.round(p.shield * 100)}% of damage and fights every turn.</div></div>
       <button class="tiny danger" data-act="partyleave" ${car.gold >= fee ? '' : 'disabled'} title="${fee ? 'Leaving before the minimum stay costs ' + fee + 'g' : 'You have served your minimum stay'}">${fee ? 'Leave (' + fee + 'g)' : 'Leave'}</button></div>`;
   }
@@ -131,7 +131,7 @@ UI.partyPanel = function (car) {
     const offers = E.partyOffers(car);
     board = `<p class="small dim">${esc(place.name)} (area rank ${E.CAREER_RANKS[Math.min(place.zone, 6)]}). The notice board changes every week.</p>` + offers.map(o => {
       const why = car.companion ? 'Dismiss your companion first' : car.char.level < o.minLevel ? `Needs level ${o.minLevel}` : (car.runs || 0) < o.needRuns ? `Needs ${o.needRuns} expeditions` : '';
-      return `<div class="item" style="--c:${o.legendary ? '#ffcb3d' : '#8fd0ff'}"><div class="slot">${o.legendary ? '🌟' : '👥'}</div><div class="body"><b>${esc(o.name)}</b> ${o.legendary ? '<span class="tag" style="color:#ffcb3d;border-color:#ffcb3d">LEGENDARY</span>' : ''}<span class="dim small">· rank ${o.zone} area</span>${o.quote ? `<div class="small dim"><i>${esc(o.quote)}</i></div>` : ''}<div>${mem(o.members)}</div>
+      return `<div class="item" style="--c:${o.legendary ? '#ffcb3d' : '#8fd0ff'}"><div class="slot">${o.legendary ? '🌟' : '👥'}</div><div class="body"><b>${esc(o.name)}</b> ${o.legendary ? '<span class="tag" style="color:#ffcb3d;border-color:#ffcb3d">LEGENDARY</span>' : ''}<span class="dim small">· ${o.level ? 'rank ' + o.rank + ' party, level ' + o.level : 'rank ' + o.zone + ' area'}</span>${o.quote ? `<div class="small dim"><i>${esc(o.quote)}</i></div>` : ''}<div>${mem(o.members)}</div>
         <div class="small dim">Level ${o.minLevel}+ · ${o.needRuns}+ expeditions · stay ${o.stay}+ or pay ${o.leavePay}g · works ${o.total} expeditions · gold/loot ${pct(o.lootMul)}, XP ${pct(o.xpMul)}, damage -${Math.round(o.shield * 100)}%</div></div>
         <button class="tiny" data-act="partyjoin" data-id="${esc(o.id)}" ${why ? 'disabled' : ''} title="${esc(why)}">${why || 'Join'}</button></div>`;
     }).join('');

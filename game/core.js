@@ -208,9 +208,26 @@ const RANKS = {
   A: { rooms: 16, scale: 8.5, rewards: 7.0, rec: 36, xpMul: 46, cs: 55 },
   S: { rooms: 18, scale: 12, rewards: 10, rec: 45, xpMul: 83, cs: 95 },
 };
-const CAREER_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S'];
+const CAREER_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S'];   // the Guild's ranks
+// Beyond the Guild's maps there are patches of land with no rank: X (unranked) and Z (forbidden). They are rarer near home and ever more
+// common far out, and they keep getting more dangerous with distance: X1..X60 and Z1..Z60 are the threat steps.
+for (let n = 1; n <= 60; n++) {
+  RANKS['X' + n] = { rooms: Math.min(24, 18 + Math.floor(n / 5)), scale: 13 + n, rewards: 11 + 2 * n, rec: 47 + Math.round(3.3 * n), xpMul: 90 + 22 * n, cs: 100 + 14 * n, wild: true, tier: n, name: 'Unranked' };
+  RANKS['Z' + n] = { rooms: Math.min(26, 20 + Math.floor(n / 5)), scale: Math.round((13 + n) * 1.5), rewards: Math.round((11 + 2 * n) * 1.7), rec: 55 + Math.round(3.6 * n), xpMul: Math.round((90 + 22 * n) * 1.8), cs: Math.round((100 + 14 * n) * 1.7), wild: true, tier: n, name: 'Forbidden' };
+}
+const rankLabel = id => RANKS[id] && RANKS[id].wild ? `${RANKS[id].name} (threat ${RANKS[id].tier})` : id;
+// 0-6 for the Guild's ranks, 7 for any unranked step and 8 for any forbidden one (used for themes, events and prices)
+const rankIdx = id => RANKS[id] && RANKS[id].wild ? 7 + (id[0] === 'Z' ? 1 : 0) : CAREER_RANKS.indexOf(id);
 const MAX_LEVEL = 30;
-const CAREER_MAX_LEVEL = 50;
+const CAREER_MAX_LEVEL = Infinity;   // heroes keep levelling in a career
+// A party member's own power at a given level, on the same curve as a hero of that level in good gear (F lvl 1 ... S lvl 45).
+const PP_CURVE = [[1, 18], [6, 35], [12, 61], [19, 86], [27, 114], [36, 159], [45, 189]];
+function partyPower(level) {
+  const c = PP_CURVE;
+  if (level <= c[0][0]) return c[0][1];
+  for (let i = 1; i < c.length; i++) if (level <= c[i][0]) return c[i - 1][1] + (c[i][1] - c[i - 1][1]) * (level - c[i - 1][0]) / (c[i][0] - c[i - 1][0]);
+  return c[c.length - 1][1] + (level - 45) * 3.3;
+}
 const MAX_SLOTS = 4;
 // Reincarnated Souls carry a hidden past life that wakes in three stages (levels 5, 15, 30).
 const AWAKEN_AT = [5, 15, 30];
@@ -336,7 +353,10 @@ function sigScaled(char, s) {
   if (c.once && TIER_BY[char.tier] >= 5) { c.charges = 2; c.desc = c.desc.replace('Once per fight', 'Twice per fight'); }
   return c;
 }
-function effSkill(char, id) {
+// Skill trees (tree.js) plug in here: mods change skills, passives change derived stats.
+const HOOKS = { mods: (char, s) => s, passives: () => ({}) };
+function effSkill(char, id) { return HOOKS.mods(char, baseEff(char, id)); }
+function baseEff(char, id) {
   let s = D.SKILLS[id];
   if (s.kinds.includes('sig')) s = sigScaled(char, s);
   const br = evoChoice(char, id), def = EVOLUTIONS[s.type];
@@ -372,16 +392,25 @@ function evolveSkill(char, id, br) {
   char.skillPts--; char.evo = char.evo || {}; char.evo[id] = br;
   return true;
 }
+// Second awakening: char.sub = { prof, tier } is a sub profession. It opens that discipline's skills and tree (gated by the sub's own
+// tier, even when it is stronger than the main one). The main profession keeps the signature skill, the slots and the power stat.
+const subKind = char => char.sub && PROF_BY[char.sub.prof] ? PROF_BY[char.sub.prof].kind : null;
+// the profession tier that gates skills of this discipline for this hero (-1 when the hero has no such discipline)
+function tierFor(char, kind) {
+  const m = PROF_BY[char.prof].kind === kind ? TIER_BY[char.tier] : -1, b = subKind(char) === kind ? TIER_BY[char.sub.tier] : -1;
+  return Math.max(m, b);   // a sub of the same discipline can still raise the gate
+}
 function learnableSkills(char) {
-  const kind = PROF_BY[char.prof].kind;
-  return D.KIND_SKILL_LIST[kind].map(id => D.SKILLS[id]);
+  const kind = PROF_BY[char.prof].kind, sk = subKind(char);
+  return D.KIND_SKILL_LIST[kind].concat(sk && sk !== kind ? D.KIND_SKILL_LIST[sk] : []).map(id => D.SKILLS[id]);
 }
 function canLearn(char, id) {
   const s = D.SKILLS[id];
   if (!s || char.skills.includes(id)) return 'Already known';
   if (s.kinds.includes('book')) return 'Needs a tome';
-  if (!s.kinds.includes(PROF_BY[char.prof].kind)) return 'Wrong discipline';
-  if (s.minTier && TIER_BY[char.tier] < TIER_BY[s.minTier]) return 'Needs a ' + TIERS[TIER_BY[s.minTier]].name + ' class or higher';
+  const mine = s.kinds.find(k => tierFor(char, k) >= 0);
+  if (!mine) return 'Wrong discipline';
+  if (s.minTier && tierFor(char, mine) < TIER_BY[s.minTier]) return 'Needs a ' + TIERS[TIER_BY[s.minTier]].name + ' class or higher' + (mine === PROF_BY[char.prof].kind ? '' : ' in your second awakening');
   if (char.level < s.lvl) return 'Needs level ' + s.lvl;
   if (char.skillPts < 1) return 'No skill points';
   return null;
@@ -542,11 +571,14 @@ function derive(char, equip) {
       else if (a === 'bloodthirst') bloodthirst += 0.03;
     }
   }
+  const tp = HOOKS.passives(char);
+  def += tp.def || 0; crit += tp.crit || 0; evade += tp.evade || 0; regen += tp.regen || 0; lifesteal += tp.lifesteal || 0; thorns += tp.thorns || 0; en += tp.en || 0;
+  burn += tp.burn || 0; poison += tp.poison || 0; chill += tp.chill || 0; critDmg += tp.critDmg || 0;
   const atkStat = Math.max(...kind.atk.map(s => st[s]));
   const powerOf = stat => 2 + st[stat] * 0.65 + weaponAtk + char.level * 0.4;
   const powerFor = {};
   for (const s of ['STR', 'AGI', 'DEX', 'INT', 'WIS']) powerFor[s] = powerOf(s);
-  let hpMult = 1 + (race.fx.hpMult || 0);
+  let hpMult = (1 + (race.fx.hpMult || 0)) * (1 + (tp.hp || 0));
   if (prof.glass) hpMult *= 0.8;
   if (hasTalent(char, 'cursedgenius')) hpMult *= 0.8;
   if (inj.includes('deep_wound')) hpMult *= 0.85;
@@ -555,7 +587,7 @@ function derive(char, equip) {
   const caster = kind.caster;
   let maxEn = 8 + (caster ? Math.floor((st.INT + st.WIS) / 2) : Math.floor((st.VIT + st.WIL) / 2)) + Math.round(en);
   if (inj.includes('concussion')) maxEn = Math.round(maxEn * 0.8);
-  let dmgMult = 1 + (hasTalent(char, 'cursedgenius') ? 0.25 : 0);
+  let dmgMult = (1 + (hasTalent(char, 'cursedgenius') ? 0.25 : 0)) * (1 + (tp.dmg || 0));
   if (inj.includes('broken_arm')) dmgMult *= 0.85;
   return {
     st, maxHp, maxEn, regen: 2 + Math.floor(st.WIL / 6) + regen,
@@ -662,11 +694,11 @@ function unequipItem(run, slot) {
 
 Object.assign(E, {
   RNG, STATS, STAT_NAMES, STAT_ROLE, TIERS, TIER_BY, POTENTIALS, RACES, RACE_BY, RACE_TIER_COLOR, KINDS, PROFESSIONS, PROF_BY, TALENTS, TALENT_BY, HIDDEN_TRAITS,
-  EVOLUTIONS, effSkill, canEvolve, evolveSkill, evoChoice,
-  RARITIES, RANKS, CAREER_RANKS, MAX_LEVEL, CAREER_MAX_LEVEL, MAX_SLOTS, PAST_LIVES, PAST_BY, AWAKEN_AT, slotCap, SLOTS_BY_TIER, TIER_FLOOR, talentGrade, MASTERY,
+  HOOKS, EVOLUTIONS, effSkill, canEvolve, evolveSkill, evoChoice,
+  RARITIES, RANKS, CAREER_RANKS, rankIdx, rankLabel, partyPower, MAX_LEVEL, CAREER_MAX_LEVEL, MAX_SLOTS, PAST_LIVES, PAST_BY, AWAKEN_AT, slotCap, SLOTS_BY_TIER, TIER_FLOOR, talentGrade, MASTERY,
   SKILLS: D.SKILLS, MONSTERS: D.MONSTERS, THEMES: D.THEMES, AFFIXES: D.AFFIXES, SLOTS: D.SLOTS, SLOT_NAMES: D.SLOT_NAMES, MATERIALS: D.MATERIALS, CONSUMABLES: D.CONSUMABLES,
   ANOMALIES: D.ANOMALIES, INJURIES: D.INJURIES, COMPANIONS: D.COMPANIONS, RECIPES: D.RECIPES, MISSION_TYPES: D.MISSION_TYPES, OPTIONALS: D.OPTIONALS, KIND_SKILL_LIST: D.KIND_SKILL_LIST,
-  makeCharacter, rollThree, hasTalent, sigSkill, loadout, masteryRank, masteryBonus, learnableSkills, canLearn, learnSkill, learnBook, toggleLoadout, autoSkills,
+  makeCharacter, rollThree, subKind, tierFor, hasTalent, sigSkill, loadout, masteryRank, masteryBonus, learnableSkills, canLearn, learnSkill, learnBook, toggleLoadout, autoSkills,
   rollRarity, genItem, genUnknownRelic, normalizeItem, sellValue, itemTitle, itemLine, itemMult, starterGear, derive, refresh, say, xpNeeded, addXp, allocate, equipItem, unequipItem,
 });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

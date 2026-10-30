@@ -150,6 +150,7 @@ UI.sheetPanel = function (run, spend) {
     <div class="small dim">ATK power ${d.power.toFixed(1)} · DEF ${d.def} · Crit ${Math.round(d.crit * 100)}% · Evade ${Math.round(d.evade * 100)}% · HP ${d.maxHp} · ${d.resName} ${d.maxEn}${d.lifesteal ? ' · Lifesteal ' + Math.round(d.lifesteal * 100) + '%' : ''}${d.thorns ? ' · Thorns ' + Math.round(d.thorns * 100) + '%' : ''}</div>
     <div class="small dim">Talents: ${c.talents.map(t => E.TALENT_BY[t].name).join(', ')}${c.hiddenRevealed ? ' · Hidden: ' + E.HIDDEN_TRAITS.find(h => h.id === c.hidden).name : ''}</div>
     ${c.pastLife ? `<div class="small" style="color:var(--accent)">Past life: ${c.awakened ? 'you were ' + E.PAST_BY[c.pastLife].name : '???'} · awakening ${c.awakened}/3${c.awakened < 3 ? ' (next at level ' + E.AWAKEN_AT[c.awakened] + ')' : ''}</div>` : ''}
+    ${c.sub ? `<div class="small" style="color:var(--accent)">Second awakening: <b>${esc(c.sub.prof)}</b> (<span style="color:${UI.tierOf(c.sub.tier).color}">${UI.tierOf(c.sub.tier).name}</span>, ${Art.KIND_LABEL[E.PROF_BY[c.sub.prof].kind]}). Sub profession: its skills and tree are open, your main class keeps the signature skill, slots and power.</div>` : ''}
     ${inj ? `<div style="margin-top:6px">${inj}</div>` : ''}</div>`;
 };
 UI.skillsPanel = function (run, canAct) {
@@ -165,13 +166,18 @@ UI.skillsPanel = function (run, canAct) {
       : (canAct ? ['a', 'b'].map(br => { const o = E.EVOLUTIONS[s.type][br], why = E.canEvolve(c, s.id); return `<button class="tiny" data-act="evolve" data-id="${s.id}" data-br="${br}" ${why ? 'disabled' : ''} title="${esc(why || 'Costs 1 skill point')}">Evolve: ${esc(o.name)} (${esc(o.desc)})</button>`; }).join(' ') : ''));
     const btn = known_ ? (canAct ? `<button class="tiny ${eq ? 'primary' : ''}" data-act="lo" data-id="${s.id}">${eq ? 'Equipped' : 'Equip'}</button>` : (eq ? '<span class="tag" style="color:var(--accent)">Equipped</span>' : ''))
       : (canAct ? `<button class="tiny" data-act="learn" data-id="${s.id}" ${why ? 'disabled' : ''}>${why || 'Learn (1 pt)'}</button>` : `<span class="tag">Lv ${s.lvl}</span>`);
-    return `<div class="item ${known_ ? '' : 'locked'}" style="--c:${known_ ? '#8fd0ff' : '#555'}"><div class="slot">✨</div><div class="body"><div><b>${esc(s.name)}</b>${s.exclusive ? ' <span class="tag" style="color:var(--accent)">Exclusive</span>' : ''} <span class="dim small">${s.ap} AP${s.en ? ' · ' + s.en + ' energy' : ''}${s.once ? ' · once' : ''} · Lv ${s.lvl}${known_ ? ' · ' + mname + ' (' + uses + ' uses, +' + mr * 8 + '%)' : ''}</span></div><div class="small dim">${esc(s.desc)}</div>${s.punish || s.interrupt || s.parry ? '<div class="small" style="color:#8fd0ff">Reactive: reads the enemy\'s next move</div>' : ''}${evBlock}</div><div class="row">${btn}</div></div>`;
+    return `<div class="item ${known_ ? '' : 'locked'}" style="--c:${known_ ? '#8fd0ff' : '#555'}"><div class="slot">✨</div><div class="body"><div><b>${esc(s.name)}</b>${s.exclusive ? ' <span class="tag" style="color:var(--accent)">Exclusive</span>' : ''} <span class="dim small">${s.ap} AP${s.en ? ' · ' + s.en + ' energy' : ''}${s.once ? ' · once' : ''}${s.cd ? ' · cd ' + s.cd : ''} · Lv ${s.lvl}${known_ ? ' · ' + mname + ' (' + uses + ' uses, +' + mr * 8 + '%)' : ''}</span></div><div class="small dim">${esc(s.desc)}</div>${s.punish || s.interrupt || s.parry ? '<div class="small" style="color:#8fd0ff">Reactive: reads the enemy\'s next move</div>' : ''}${evBlock}</div><div class="row">${btn}</div></div>`;
   };
   const books = known.filter(s => s.kinds.includes('book')).map(row).join('');
+  // skills that come from the tree or from the road (any discipline, any rarity) live here so they can be equipped
+  const rtag = r => `<span class="tag" style="color:${E.TIERS[r].color};border-color:${E.TIERS[r].color}">${E.TIERS[r].name}</span>`;
+  const extra = known.filter(s => !learn.includes(s) && !s.kinds.includes('book') && !s.kinds.includes('sig') && s.id !== 'attack' && s.id !== 'guard')
+    .map(s => row(s).replace('<b>' + esc(s.name) + '</b>', '<b>' + esc(s.name) + '</b> ' + rtag(E.skillRarity(s.id)) + (E.isForeign(c, s.id) ? ' <span class="tag" style="color:var(--accent)">Other discipline</span>' : s.kinds.includes('tree') ? ' <span class="tag">Tree</span>' : ''))).join('');
+  const pas = (c.passives || []).map(id => E.PASSIVE_BY[id]).filter(Boolean).map(p => `<div class="item" style="--c:${E.TIERS[p.rarity].color}"><div class="slot">🛡️</div><div class="body"><div><b>${esc(p.name)}</b> ${rtag(p.rarity)} <span class="tag">Passive</span></div><div class="small dim">${esc(p.desc)} Always active, no slot needed.</div></div></div>`).join('');
   const sig = E.sigSkill(c);
-  return `<div class="panel"><h3>Skills · ${Art.KIND_LABEL[kind]}</h3>
+  return `<div class="panel"><h3>Skills · ${Art.KIND_LABEL[kind]}${c.sub ? ' + ' + Art.KIND_LABEL[E.PROF_BY[c.sub.prof].kind] + ' (second awakening)' : ''}</h3>
     <div class="small dim">Skill points: <b style="color:var(--accent)">${c.skillPts}</b> · Equipped ${c.loadout.length}/${E.slotCap(c)}. Skills grow stronger with use.${sig ? ' Signature: <b>' + E.SKILLS[sig].name + '</b> is always equipped.' : ''}</div>
-    ${learn.map(row).join('')}${books ? '<h3 style="margin-top:10px">Tomes</h3>' + books : ''}</div>`;
+    ${learn.map(row).join('')}${books ? '<h3 style="margin-top:10px">Tomes</h3>' + books : ''}${extra ? '<h3 style="margin-top:10px">Tree and taught skills</h3>' + extra : ''}${pas ? '<h3 style="margin-top:10px">Passive skills</h3>' + pas : ''}</div>`;
 };
 UI.consPanel = function (run, opts) {
   const o = opts || {}, inCombat = !!o.combat;

@@ -5,7 +5,7 @@ const E = root.Engine;
 const D = root.DATA;
 const { RNG, RANKS, CAREER_RANKS, RACE_BY, PROF_BY, STATS, hasTalent, say, refresh, genItem, genUnknownRelic, derive, starterGear, lootCtx, addXp, healHp, addMat, randomCons } = E;
 
-const rankIndex = id => CAREER_RANKS.indexOf(id);
+const rankIndex = id => E.rankIdx(id);
 const SPECIAL = ['shrine', 'camp', 'event', 'trap', 'puzzle', 'treasure', 'secret', 'merchant', 'missing', 'relic'];
 
 // ---------- Dungeon ----------
@@ -434,7 +434,7 @@ function careerNewRun(career, mission) {
   const equip = {};
   for (const slot of D.SLOTS) { const it = career.equip[slot]; equip[slot] = it ? Object.assign({}, it, { fromVault: true }) : null; }
   const comp = career.companion ? { id: career.companion.id, name: career.companion.name } : null;
-  const pt = career.party ? { name: career.party.name, members: career.party.members.map(m => Object.assign({}, m)), lootMul: career.party.lootMul, xpMul: career.party.xpMul, shield: career.party.shield, pw: career.party.pw } : null;
+  const pt = career.party ? { name: career.party.name, members: career.party.members.map(m => Object.assign({}, m)), lootMul: career.party.lootMul, xpMul: career.party.xpMul, shield: career.party.shield, pw: career.party.pw, level: career.party.level, boost: career.party.boost, legendary: career.party.legendary, rank: career.party.rank } : null;
   const run = makeRun(char, equip, mission.seed, mission.rank, dungeon, {
     career: true, mission: mission.free ? null : mission, cons: Object.assign({}, career.cons), potions: career.potions, blessing: career.blessNext, companion: comp, party: pt,
     hpFrac: career.char.injuries && career.char.injuries.length ? 0.85 : 1,
@@ -715,7 +715,7 @@ function partyOffers(career) {
       minLevel: Math.max(1, RANKS[rk].rec - 2 + rng.int(0, 2)), needRuns: ri === 0 ? rng.int(0, 2) : rng.int(2, 5),
       stay: rng.int(2, 4), total: rng.int(5, 7), leavePay: Math.round((40 + 20 * size) * (1 + 0.5 * ri)),
       lootMul: +((size === 2 ? 0.75 : 0.62) + rng.next() * 0.06).toFixed(2), xpMul: +((size === 2 ? 0.8 : 0.68) + rng.next() * 0.06).toFixed(2),
-      shield: size === 2 ? 0.1 : 0.16, pw: +(0.8 + 0.12 * ri).toFixed(2),
+      shield: size === 2 ? 0.1 : 0.16, pw: +(0.8 + 0.12 * ri).toFixed(2), level: RANKS[rk].rec + rng.int(-1, 2), boost: 1,
     });
   }
   if (place.kind === 'capital') for (const l of E.legendaryOffers(career, place)) out.push(l);
@@ -728,7 +728,7 @@ function partyJoin(career, id) {
   if (!o) return { ok: false, msg: 'That party has moved on.' };
   if (career.char.level < o.minLevel) return { ok: false, msg: `They want someone of level ${o.minLevel} or more.` };
   if ((career.runs || 0) < o.needRuns) return { ok: false, msg: `They only take adventurers with ${o.needRuns}+ expeditions behind them.` };
-  career.party = { id: o.id, name: o.name, members: o.members.map(m => Object.assign({}, m)), stay: o.stay, done: 0, left: o.total, leavePay: o.leavePay, lootMul: o.lootMul, xpMul: o.xpMul, shield: o.shield, pw: o.pw };
+  career.party = { id: o.id, name: o.name, members: o.members.map(m => Object.assign({}, m)), stay: o.stay, done: 0, left: o.total, leavePay: o.leavePay, lootMul: o.lootMul, xpMul: o.xpMul, shield: o.shield, pw: o.pw, level: o.level, boost: o.boost || 1, legendary: !!o.legendary, rank: o.rank || o.zone };
   return { ok: true, msg: `You join ${o.name}. Stay for at least ${o.stay} expeditions or pay ${o.leavePay}g to leave early.` };
 }
 function partyLeaveFee(career) { const p = career.party; return !p ? 0 : p.done >= p.stay ? 0 : p.leavePay; }

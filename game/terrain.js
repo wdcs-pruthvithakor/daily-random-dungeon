@@ -159,6 +159,20 @@ function nationOf(seed, hs, biome, ring, r) {
   const council = COUNCIL[Math.floor(r(40) * COUNCIL.length)];
   return { name: nm, polity, full: `${polity} of ${nm}`, race: mixed ? 'Mixed' : race, mixed, palace, ruler, council, all: all.length };
 }
+// Beyond the Guild's maps: patches of rankless land. Inside 120 tiles there are none; further out they are 40-tile areas that turn up more
+// and more often, sitting between ordinary counties that still have towns and guilds. Some are forbidden. Their threat grows with distance.
+const WILD_FROM = 120, FORBID_CELL = 40;
+const wildTier = d => Math.max(1, Math.min(60, Math.floor((d - 150) / 22) + 1));
+function wildOf(seed, x, y) {
+  const d = Math.hypot(x, y);
+  if (d < WILD_FROM) return null;
+  const hs = hashStr(seed + '|forbid|' + Math.floor(x / FORBID_CELL) + '|' + Math.floor(y / FORBID_CELL));
+  if (h2(hs, 3, 7) >= Math.min(0.85, (d - WILD_FROM) / 450)) return null;
+  const zForb = Math.max(0.08, Math.min(0.5, 0.08 + (d - WILD_FROM) / 900));
+  return (h2(hs, 5, 11) < zForb ? 'Z' : 'X') + wildTier(d);
+}
+// what to print for a place: the Guild rank letter, or Unranked / Forbidden
+const zoneLabel = (seed, x, y) => { const w = wildOf(seed, x, y); return w ? E.RANKS[w].name : CAREER_RANKS[zoneOf(x, y)]; };
 function zoneOf(x, y) { return Math.min(CAREER_RANKS.length - 1, Math.floor(Math.hypot(x, y) / 26)); }
 function structure(seed, cx, cy) {
   const hs = hashStr(seed + '|cell|' + cx + '|' + cy);
@@ -171,7 +185,8 @@ function structure(seed, cx, cy) {
   if (!isCap && r(3) > (near ? 0.7 : 0.55)) return null;
   const t = tile(seed, ox, oy), bio = BIOMES[t.b];
   if (!bio.cost || t.b === B.SHALLOW || t.b === B.RIVER) return null;
-  const ring = zoneOf(ox, oy);
+  const ring = zoneOf(ox, oy), wild = wildOf(seed, ox, oy);
+  if (isCap && wild) return null;
   if (isCap) {
     const nation = nationOf(seed, hs, t.b, ring, r);
     const cn = SET_A[Math.floor(r(8) * SET_A.length)] + SET_B[Math.floor(r(9) * SET_B.length)];
@@ -190,10 +205,11 @@ function structure(seed, cx, cy) {
     return list[Math.floor(r(5) * list.length)];
   })();
   const pre = PRE[Math.floor(r(6) * PRE.length)];
+  if (wild && ['village', 'town', 'racehold'].includes(sub)) sub = 'dungeon';   // nobody settles the rankless patches; the counties are in between
   const s = { id: cx + ',' + cy, x: ox, y: oy, sub, ring, biome: t.b, secret: sub === 'vault' };
   s.kind = sub === 'dungeon' || sub === 'lair' ? 'dungeon' : 'poi';
-  if (sub === 'dungeon') { s.themeId = theme.id; s.name = `${pre} ${theme.name}`; s.rank = CAREER_RANKS[ring]; const w = WARDENS(); s.warden = ring >= 1 && w.length ? w[Math.floor(r(7) * w.length)] : null; }
-  else if (sub === 'lair') { s.themeId = theme.id; s.name = `${pre} Lair`; s.rank = CAREER_RANKS[ring]; s.rooms = 4; }
+  if (sub === 'dungeon') { s.themeId = theme.id; s.name = `${pre} ${theme.name}`; s.rank = wild || CAREER_RANKS[ring]; if (wild) s.wild = true; const w = WARDENS(); s.warden = ring >= 1 && w.length ? w[Math.floor(r(7) * w.length)] : null; }
+  else if (sub === 'lair') { s.themeId = theme.id; s.name = `${pre} Lair`; s.rank = wild || CAREER_RANKS[ring]; if (wild) s.wild = true; s.rooms = 4; }
   else if (sub === 'racehold') {
     const pool = (RACE_BIOME[t.b] || ['Human']).filter(rn => ring >= (RACE_MIN_RING[rn] || 0));
     s.race = (pool.length ? pool : ['Human'])[Math.floor(r(12) * (pool.length || 1))];
@@ -251,5 +267,5 @@ function normSeed(s) {
   return str === '' ? null : hashStr(str);
 }
 
-E.Terrain = { RACE_BIOME, RACE_PLACE, B, BIOMES, DEC, CH, CELL, SEA, hashStr, h2, tile, cost, chunk, structure, structAt, structuresIn, structById, zoneOf, path, normSeed, SUBNAME };
+E.Terrain = { RACE_BIOME, RACE_PLACE, B, BIOMES, DEC, CH, CELL, SEA, hashStr, h2, tile, cost, chunk, structure, structAt, structuresIn, structById, zoneOf, wildOf, wildTier, zoneLabel, WILD_FROM, path, normSeed, SUBNAME };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

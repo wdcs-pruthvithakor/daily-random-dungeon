@@ -26,10 +26,16 @@ function courierCard(car) {
   const row = x => {
     const d = E.dir8(x.to.x - (E.worldOf(car).x), x.to.y - E.worldOf(car).y);
     const esc_ = x.kind === 'escort';
+    if (x.kind === 'survey') return `<div class="item" style="--c:#c88bff"><div class="slot">🔭</div><div class="body"><b>Investigate: ${esc(x.parcel)}</b> <span class="tag" style="color:${x.rank[0] === 'Z' ? '#ff6060' : '#e8f4ff'}">${esc(E.rankLabel(x.rank))}</span> ${(t => `<span class="tag" style="color:${t.color};border-color:${t.color}">${t.label}</span>`)(E.threatOf(car, x.rank))}<div class="small dim"><i>${esc(x.hook)}</i></div><div class="small dim">${esc(x.to.name)}, ${x.dist} tiles to the ${d.name} · ${x.days} days · ${x.gold}g · ${x.credits} credits · ${x.rep} rep · plus what the place teaches. Danger is judged against your power now (${E.threatOf(car, x.rank).power} vs about ${E.threatOf(car, x.rank).need} expected there).</div></div><button class="tiny" data-act="courieraccept" data-id="${esc(x.id)}">Take it</button></div>`;
     return `<div class="item" style="--c:#ffcb3d"><div class="slot">${esc_ ? '🧳' : '📦'}</div><div class="body"><b>${esc_ ? 'Escort ' + esc(x.parcel) : 'Deliver ' + esc(x.parcel)} to ${esc(x.to.name)}</b><div class="small dim">${x.dist} tiles to the ${d.name} · ${x.days} days · ${x.gold}g · ${x.credits} credits · ${x.rep} rep${esc_ ? ' · ambushes likely' : ''}</div></div><button class="tiny" data-act="courieraccept" data-id="${esc(x.id)}">Take it</button></div>`;
   };
-  return `<div class="panel"><h3>📦 Courier and escort jobs</h3><p class="small dim">Travel jobs: the destination is flagged on your map with a direction arrow and a tracker. <b>Courier</b>: carry a parcel. <b>Escort</b>: a client walks with you and <b>bandits may ambush you on the road</b>; keep them alive for the full pay. Late delivery pays half.</p>${o.map(row).join('')}</div>`;
+  return `<div class="panel"><h3>📦 Courier, escort and investigation jobs</h3><p class="small dim">Travel jobs: the destination is flagged on your map with a direction arrow and a tracker. <b>Courier</b>: carry a parcel. <b>Escort</b>: a client walks with you and <b>bandits may ambush you on the road</b>; keep them alive for the full pay. Late delivery pays half. <b>Investigation</b>: the Guild never mapped the rankless lands; clear the place the board names and learn what it was. They are unrated, so go prepared.</p>${o.map(row).join('')}</div>`;
 }
+UI.lorePanel = function (car) {
+  const l = car.lore || [];
+  if (!l.length) return '';
+  return `<div class="panel"><h3>📜 Lore journal</h3><p class="small dim">What you learned investigating the rankless lands.</p>${l.slice().reverse().map(x => `<div class="item" style="--c:#c88bff"><div class="slot">📜</div><div class="body"><b>${esc(x.title)}</b> <span class="dim small">· ${esc(x.place)} · day ${x.day}</span><div class="small">${esc(x.text)}</div></div></div>`).join('')}</div>`;
+};
 UI.guildPanel = function (car) {
   const place = E.guildPlace(car) || { name: 'Hearthhold', kind: 'home', zone: 0 };
   const zr = E.CAREER_RANKS[Math.min(place.zone, 6)], my = E.careerRank(car), up = E.CAREER_RANKS[ri(my) + 1];
@@ -42,7 +48,7 @@ UI.guildPanel = function (car) {
     const rec = E.RANKS[r].rec, lvl = car.char.level, dg = lvl < rec - 3 ? ['Deadly', 'var(--bad)'] : lvl < rec ? ['Dangerous', '#ff8a3d'] : lvl > rec + 5 ? ['Easy', 'var(--dim)'] : ['Suitable', 'var(--good)'];
     return `<button data-act="freerun" data-rank="${r}" title="Recommended level ${rec}">${r}-rank <small style="color:${dg[1]}">${dg[0]}</small></button>`;
   }).join('')}</div></div>`;
-  return head + testCard(car) + UI.guildBoardPanel(car) + courierCard(car) + free;
+  return head + testCard(car) + UI.guildBoardPanel(car) + courierCard(car) + free + UI.lorePanel(car);
 };
 
 // ---------- arena ----------

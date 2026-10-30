@@ -88,12 +88,18 @@ function wardenTick(run, e) {
     if (run.rng.chance(run.d.wilRes)) say(run, 'You throw off the hex.'); else { run.weak = Math.max(run.weak, 2); say(run, `${e.name} hexes you.`); }
   }
 }
+// A legendary rival is ranked two ranks above the area, so it hits and endures like a party from there.
+function legendMul(run) {
+  const i = E.rankIdx(run.rankId), up = E.RANKS[E.CAREER_RANKS[Math.min(i + 2, E.CAREER_RANKS.length - 1)]];
+  const ratio = up.scale / E.RANKS[run.rankId].scale;
+  return { hp: Math.max(1.3, 1 + (ratio - 1) * 0.8), atk: Math.max(1.15, 1 + (ratio - 1) * 0.55) };
+}
 function duelParty(run) {
-  const d = run.duel, out = [];
+  const d = run.duel, out = [], lm = d.legendary ? legendMul(run) : null;
   for (const m of d.members) {
-    const e = makeEnemy(D.DUEL_ROLES[m.role], run, { hpMult: (d.hpMult || 1) * (d.legendary ? 1.3 : 1) });
+    const e = makeEnemy(D.DUEL_ROLES[m.role], run, { hpMult: (d.hpMult || 1) * (lm ? lm.hp : 1) });
     e.name = `${m.name} the ${D.DUEL_ROLES[m.role].name}`; e.drops = [];
-    if (d.legendary) { e.atk = Math.round(e.atk * 1.15 * 10) / 10; e.xp *= 1.6; e.gold *= 1.6; }
+    if (d.legendary) { e.atk = Math.round(e.atk * lm.atk * 10) / 10; e.xp *= 1.6; e.gold *= 1.6; }
     out.push(e);
   }
   return out;
@@ -153,7 +159,7 @@ function rollIntents(run) {
 }
 
 function startCombat(run, type) {
-  run.combat = { type, enemies: buildEncounter(run, type), turn: 1, ap: run.d.shaken ? 2 : 3, used: {}, over: false, won: false, target: 0, summary: null, firstHit: type === 'elite_sneak' };
+  run.combat = { type, enemies: buildEncounter(run, type), turn: 1, ap: run.d.shaken ? 2 : 3, used: {}, cdl: {}, over: false, won: false, target: 0, summary: null, firstHit: type === 'elite_sneak' };
   run.block = 0; run.counter = 0; run.stagger = false; run.parry = null;
   rollIntents(run);
   run.seenMons = run.seenMons || {};
@@ -180,6 +186,7 @@ function skillCost(run, id) {
 function canUse(run, id) {
   const c = run.combat, s = E.effSkill(run.char, id);
   if (!c || c.over || run.dead) return 'No combat';
+  if (s.cd && (c.cdl[id] || 0) > 0) return `Ready in ${c.cdl[id]} turn${c.cdl[id] > 1 ? 's' : ''}`;
   if (c.ap < s.ap) return 'Not enough AP';
   if (run.en < skillCost(run, id)) return 'Not enough ' + run.d.resName.toLowerCase();
   if (s.once && (c.used[id] || 0) >= (s.charges || 1)) return 'Already used this fight';
@@ -226,8 +233,8 @@ function dealHit(run, e, mult, opts) {
   return total;
 }
 // Damage that does not crit, proc or use buffs: allies, spirits, bombs.
-function fixedHit(run, e, mult, label, status) {
-  let raw = run.d.power * mult * (0.9 + run.rng.next() * 0.2);
+function fixedHit(run, e, mult, label, status, basePow) {
+  let raw = (basePow || run.d.power) * mult * (0.9 + run.rng.next() * 0.2);
   let dmg = Math.max(1, Math.round(raw * (1 - e.def / (e.def + 20)) * (e.guarding ? 0.5 : 1)));
   dmg = absorb(e, dmg);
   e.hp -= dmg;
@@ -281,8 +288,8 @@ function playerEvade(run) { return Math.min(0.7, run.d.evade + (run.buffs && run
 // Which power a skill scales from: its own discipline's attack stat (so a Tome spell on a warrior uses INT).
 function skillPower(run, s) {
   const d = run.d, myKind = PROF_BY[run.char.prof].kind;
-  const native = s.kinds.find(k => KINDS[k]);
-  if (!native || s.kinds.includes('all') || s.kinds.includes(myKind)) return d.power;
+  const native = s.bk || s.kinds.find(k => KINDS[k]);
+  if (!native || s.kinds.includes('all') || s.kinds.includes(myKind) || native === myKind) return d.power;
   const stats = KINDS[native].atk;
   return Math.max(...stats.map(x => d.powerFor[x]));
 }
@@ -307,6 +314,7 @@ function act0(run, id, targetIdx) {
   c.ap -= s.ap;
   run.en -= skillCost(run, id);
   if (s.once) c.used[id] = (c.used[id] || 0) + 1;
+  if (s.cd) c.cdl[id] = s.cd;
   run.char.mastery[id] = (run.char.mastery[id] || 0) + 1;
   const mb = 1 + masteryBonus(run.char, id);
   if (s.hpCost) { run.hp -= Math.round(d.maxHp * s.hpCost); say(run, `You spend ${Math.round(s.hpCost * 100)}% HP.`); }
@@ -560,19 +568,21 @@ function partyShield(run) {
 }
 function companionAct(run) {
   if (run.companion) companionTurn(run, run.companion, 1);
-  if (run.party) for (const m of run.party.members) { if (!living(run).length) break; companionTurn(run, m, run.party.pw * partyAura(run) * 0.45); }
+  if (run.party) for (const m of run.party.members) { if (!living(run).length) break; companionTurn(run, m, run.party.level ? partyAura(run) : run.party.pw * partyAura(run) * 0.45, run.party.level ? E.partyPower(run.party.level) * (run.party.boost || 1) : 0); }
 }
-function companionTurn(run, comp, pwr) {
+// Parties fight at their own level (basePow), not the hero's, so a party is only as strong as its rank says. Companions use the hero's power.
+function companionTurn(run, comp, pwr, basePow) {
   const alive = living(run);
   if (!alive.length) return;
   const weakest = alive.slice().sort((a, b) => a.hp - b.hp)[0];
-  const lvlMul = (1 + run.char.level * 0.02) * pwr;
-  if (comp.id === 'squire') fixedHit(run, weakest, 0.5 * lvlMul, comp.name);
-  else if (comp.id === 'cleric') { healHp(run, run.d.maxHp * 0.08 * Math.min(1.5, pwr)); say(run, `${comp.name} heals you.`); }
-  else if (comp.id === 'hound') fixedHit(run, weakest, 0.35 * lvlMul, comp.name, { bleed: 3 });
-  else if (comp.id === 'mage') for (const e of alive) fixedHit(run, e, 0.25 * lvlMul, comp.name);
-  else if (comp.id === 'scout') fixedHit(run, weakest, (run.rng.chance(0.25) ? 0.9 : 0.45) * lvlMul, comp.name);
-  else fixedHit(run, weakest, 0.4 * lvlMul, comp.name);
+  const lvlMul = basePow ? pwr : (1 + run.char.level * 0.02) * pwr;
+  const hit = (e, m, st) => fixedHit(run, e, m, comp.name, st, basePow);
+  if (comp.id === 'squire') hit(weakest, 0.5 * lvlMul);
+  else if (comp.id === 'cleric') { healHp(run, run.d.maxHp * 0.08 * (basePow ? Math.min(2, basePow / run.d.power) * 0.6 * pwr : Math.min(1.5, pwr))); say(run, `${comp.name} heals you.`); }
+  else if (comp.id === 'hound') hit(weakest, 0.35 * lvlMul, { bleed: 3 });
+  else if (comp.id === 'mage') for (const e of alive) hit(e, 0.25 * lvlMul);
+  else if (comp.id === 'scout') hit(weakest, (run.rng.chance(0.25) ? 0.9 : 0.45) * lvlMul);
+  else hit(weakest, 0.4 * lvlMul);
 }
 
 // ---------- Turn flow ----------
@@ -653,12 +663,14 @@ function endTurn(run) {
   if (run.weak > 0) run.weak--;
   if (run.buffs) for (const k of Object.keys(run.buffs)) { run.buffs[k].turns--; if (run.buffs[k].turns <= 0) delete run.buffs[k]; }
   // new turn
+  for (const k of Object.keys(c.cdl)) if (c.cdl[k] > 0) c.cdl[k]--;
   c.turn++; c.ap = run.stagger ? 2 : 3; run.stagger = false; run.block = 0; run.counter = 0; run.parry = null;
   run.en = Math.min(run.d.maxEn, run.en + Math.max(0, run.d.regen - (anomaly(run, 'mana_drought') ? 2 : 0)));
   rollIntents(run);
 }
 
 Object.assign(E, {
+  companionAct,
   INTENT_INFO, MUTS, WARDENS, anomaly, living, healHp, makeEnemy, buildEncounter, startCombat, previewDamage, skillCost, canUse, act, usePotion, usePotionInCombat, useConsumable,
   lootCtx, addMat, randomCons, dropLoot, finish, endTurn, summonEnemy, applyStatus, damagePlayer, livingEnemies: living,
 });
