@@ -440,7 +440,7 @@ function careerNewRun(career, mission) {
     hpFrac: career.char.injuries && career.char.injuries.length ? 0.85 : 1,
   });
   run.nodeId = mission.nodeId || null; run.arena = !!mission.arena;
-  run.duel = mission.duel || null; run.tourney = mission.tourney || null; run.rankTest = mission.rankTest || null;
+  run.duel = mission.duel || null; run.ambush = !!mission.ambush; run.tourney = mission.tourney || null; run.rankTest = mission.rankTest || null;
   if (run.duel) run.seenMons = {};
   run.secretShown = secret; run.startCons = Object.assign({}, career.cons); run.startPotions = career.potions;
   career.blessNext = false;

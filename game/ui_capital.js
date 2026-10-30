@@ -17,14 +17,18 @@ function testCard(car) {
     <button class="primary" data-act="ranktest" ${t.ok ? '' : 'disabled'}>Take the ${t.next}-rank test (${t.fee}g)</button></div></div>`;
 }
 function courierCard(car) {
-  const w = E.worldOf(car), c = car.courier;
-  if (c) {
-    const left = c.due - w.day;
-    return `<div class="panel"><h3>📦 Courier job in progress</h3><div class="item" style="--c:#ffcb3d"><div class="slot">📦</div><div class="body"><b>${esc(c.parcel)} for ${esc(c.to.name)}</b><div class="small dim">${c.dist} tiles from ${esc(c.from)} · ${left >= 0 ? left + ' day(s) left' : '<span style="color:var(--bad)">late: half pay</span>'} · ${c.gold}g, ${c.credits} credits, ${c.rep} rep. The destination is marked on your map. Walk there to deliver.</div></div><button class="tiny danger" data-act="courierabandon">Abandon (-1 rep)</button></div></div>`;
+  const q = E.questInfo(car);
+  if (q) {
+    return `<div class="panel"><h3>${q.k.icon} Job in progress: ${q.k.name}</h3><div class="item" style="--c:#ffcb3d"><div class="slot">${q.k.icon}</div><div class="body"><b>${esc(q.parcel)} → ${esc(q.to.name)}</b><div class="small dim">${q.arrow} ${q.dist} tiles to the ${q.dir} · ${q.left >= 0 ? q.left + ' day(s) left' : '<span style="color:var(--bad)">late: half pay</span>'} · ${q.gold}g, ${q.credits} credits, ${q.rep} rep. It is flagged on your map (Map tab shows the way).</div></div><button class="tiny danger" data-act="courierabandon">Abandon (-1 rep)</button></div></div>`;
   }
   const o = E.courierOffers(car);
   if (!o.length) return '';
-  return `<div class="panel"><h3>📦 Courier jobs</h3><p class="small dim">Carry a parcel to another settlement. No fighting required, just a long walk. Late deliveries pay half.</p>${o.map(x => `<div class="item" style="--c:#ffcb3d"><div class="slot">📦</div><div class="body"><b>${esc(x.parcel)} to ${esc(x.to.name)}</b><div class="small dim">${x.dist} tiles · ${x.days} days · ${x.gold}g · ${x.credits} credits · ${x.rep} rep</div></div><button class="tiny" data-act="courieraccept" data-id="${esc(x.id)}">Take it</button></div>`).join('')}</div>`;
+  const row = x => {
+    const d = E.dir8(x.to.x - (E.worldOf(car).x), x.to.y - E.worldOf(car).y);
+    const esc_ = x.kind === 'escort';
+    return `<div class="item" style="--c:#ffcb3d"><div class="slot">${esc_ ? '🧳' : '📦'}</div><div class="body"><b>${esc_ ? 'Escort ' + esc(x.parcel) : 'Deliver ' + esc(x.parcel)} to ${esc(x.to.name)}</b><div class="small dim">${x.dist} tiles to the ${d.name} · ${x.days} days · ${x.gold}g · ${x.credits} credits · ${x.rep} rep${esc_ ? ' · ambushes likely' : ''}</div></div><button class="tiny" data-act="courieraccept" data-id="${esc(x.id)}">Take it</button></div>`;
+  };
+  return `<div class="panel"><h3>📦 Courier and escort jobs</h3><p class="small dim">Travel jobs: the destination is flagged on your map with a direction arrow and a tracker. <b>Courier</b>: carry a parcel. <b>Escort</b>: a client walks with you and <b>bandits may ambush you on the road</b>; keep them alive for the full pay. Late delivery pays half.</p>${o.map(row).join('')}</div>`;
 }
 UI.guildPanel = function (car) {
   const place = E.guildPlace(car) || { name: 'Hearthhold', kind: 'home', zone: 0 };

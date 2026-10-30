@@ -164,6 +164,41 @@ for (let i = 0; i < 12; i++) {
   const cr = E.careerNewRun(car, cm); cr.stats.kills = cm.objective.count; t('extermination counts kills', E.missionMet(cr) && E.missionProgress(cr).includes('/'));
 }
 
+// ---- travelling quests: escort, ambush, stranger, slay ----
+{
+  const car = newCareer('quests'); E.worldOf(car); const w = E.worldOf(car); car.gold = 1000;
+  let esc = null; for (let b = 0; b < 12 && !esc; b++) { car.boardN = b; esc = E.courierOffers(car).find(o => o.kind === 'escort'); }
+  t('home or town offers an escort job', !!esc && esc.hp === 3 && esc.gold > 0);
+  const acc = E.courierAccept(car, esc.id), qi = E.questInfo(car);
+  t('escort accepted with direction and marker', acc.ok && qi.kind === 'escort' && qi.dist > 5 && qi.dir && w.markers.some(m => m.quest) && E.worldIsExplored(w, esc.to.x, esc.to.y));
+  // walk the road until an ambush appears
+  let amb = null; w.x = 3; w.y = 0;
+  for (let i = 0; i < 4000 && !amb; i++) { w.pending = null; const ev = E.questStep(car, new E.RNG('t' + i)); if (ev) amb = ev; }
+  t('escort draws ambushes on the road', amb && amb.ambush && amb.choices.some(c => c.fight));
+  w.pending = { nodeId: null, ev: amb, res: null }; E.worldChoose(car, 0);
+  t('fighting leaves a pending fight that blocks walking', w.pending.res.fight && !E.worldStep(car, 1, 0).ok && E.worldDismiss(car) === undefined && !!w.pending);
+  const m = E.worldAmbush(car), run = E.careerNewRun(car, m); E.startCombat(run, 'boss');
+  t('ambush is a map fight against bandits', m.ambush && run.duel && run.combat.enemies.length >= 3 && run.dungeon.rows.length === 0);
+  const lost = E.careerEnd(car, run, 'dead');
+  t('losing an ambush is not death but hurts the client', lost.ambush && !lost.ambush.won && car.deaths === 0 && car.courier.hp === 2 && !w.pending);
+  car.courier.hp = 1; w.pending = { nodeId: null, ev: amb, res: { fight: true, lines: [], items: [] } };
+  const r2 = E.careerNewRun(car, E.worldAmbush(car)); E.startCombat(r2, 'boss'); E.careerEnd(car, r2, 'dead');
+  t('client who is hurt too often dies and the job fails', !car.courier && !E.questInfo(car));
+  // delivering
+  E.questStart(car, esc); const g0 = car.gold, ls = [];
+  E.courierArrive(car, { id: esc.to.id, name: esc.to.name }, ls);
+  t('escort pays on arrival', car.gold >= g0 + Math.round(esc.gold * 0.5) && !car.courier && ls[0].includes('safely'));
+  // strangers
+  let st = null; for (let i = 0; i < 400 && !st; i++) { w.x = (i * 7) % 60 - 30; w.y = (i * 11) % 60 - 30; st = E.strangerEvent(car, new E.RNG('s' + i)); }
+  t('strangers offer jobs', st && st.choices.length === 2 && st.choices[0].out.quest && st.choices[0].out.quest.to.id);
+  w.pending = { nodeId: null, ev: st, res: null }; E.worldChoose(car, 0);
+  t('accepting a stranger quest starts it', !!car.courier && car.courier.from === 'a stranger');
+  t('no second stranger while busy', E.strangerEvent(car, new E.RNG('x')) === null);
+  // slay completes on clearing the lair
+  car.courier = null; let sl = null; for (let i = 0; i < 600 && !(sl && sl.choices[0].out.quest.kind === 'slay'); i++) { w.x = (i * 13) % 80 - 40; w.y = (i * 17) % 80 - 40; sl = E.strangerEvent(car, new E.RNG('l' + i)); }
+  if (sl && sl.choices[0].out.quest.kind === 'slay') { E.questStart(car, sl.choices[0].out.quest); const q = sl.choices[0].out.quest, l2 = []; E.courierArrive(car, { id: q.to.id, name: q.to.name }, l2); t('slay quest ignores arrival', !!car.courier); E.questNodeCleared(car, q.to.id, l2); t('slay quest pays when the lair is cleared', !car.courier && l2.length >= 1); } else t('slay stranger found', false);
+}
+
 // ---- capital services ----
 {
   const car = newCareer('svc'); E.worldOf(car);

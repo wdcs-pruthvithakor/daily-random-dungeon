@@ -261,7 +261,8 @@ function encounterPanel(car) {
   if (res) {
     const lines = res.lines.map(l => `<p>${esc(l)}</p>`).join('');
     const items = res.items.map(it => UI.itemBlock(it, '')).join('');
-    return `<div class="panel encounter fade"><h2>${ev.icon} ${esc(ev.title)} ${tag}</h2>${lines}${items}<p><button class="primary" data-act="mapdismiss">Continue <kbd>Enter</kbd></button></p></div>`;
+    const go = res.fight ? `<button class="primary big" data-act="mapfight">⚔️ Fight! <kbd>Enter</kbd></button>` : `<button class="primary" data-act="mapdismiss">Continue <kbd>Enter</kbd></button>`;
+    return `<div class="panel encounter fade"${res.fight ? ' style="border-color:var(--bad)"' : ''}><h2>${ev.icon} ${esc(ev.title)} ${tag}</h2>${lines}${items}<p>${go}</p></div>`;
   }
   const hub = S.hub;
   const choices = ev.choices.map((ch, i) => {
@@ -271,6 +272,20 @@ function encounterPanel(car) {
     return `<button class="choice" data-act="mapchoose" data-i="${i}" ${bad ? 'disabled' : ''}><kbd>${i + 1}</kbd> ${esc(ch.label)}${chk}</button>`;
   }).join('');
   return `<div class="panel encounter fade"><h2>${ev.icon} ${esc(ev.title)} ${tag}</h2><p>${esc(ev.text)}</p><div class="choices">${choices}</div></div>`;
+}
+// The job you are on: where to go, which way, how far, how long you have left.
+function questPanel(car) {
+  const q = E.questInfo(car); if (!q) return '';
+  const left = q.left >= 0 ? `${q.left} day${q.left === 1 ? '' : 's'} left` : '<span style="color:var(--bad)">late: half pay</span>';
+  const hearts = q.kind === 'escort' ? ` · ${esc(q.parcel)} ${'❤️'.repeat(Math.max(0, q.hp))}${'🖤'.repeat(Math.max(0, 3 - q.hp))}` : '';
+  const verb = { courier: 'Deliver ' + q.parcel + ' to', escort: 'Escort ' + q.parcel + ' to', errand: 'Find what was lost at', slay: 'Clear out' }[q.kind || 'courier'];
+  const w = E.worldOf(car), here = w.x === q.to.x && w.y === q.to.y;
+  const note = q.kind === 'slay' ? 'Walk there, enter the lair and win.' : q.kind === 'escort' ? 'Walk the whole way. Bandits and beasts may ambush you on the road, and if your client is hurt too often they will not survive.' : 'Walk to it. A road ambush is possible on the way.';
+  return `<div class="panel" style="border-color:#ffcb3d"><div class="row between"><div style="flex:1;min-width:230px"><h3>${q.k.icon} Current job: ${q.k.name}</h3>
+    <div><b>${verb} ${esc(q.to.name)}</b></div>
+    <div class="small"><span style="font-size:20px;color:var(--accent)">${q.arrow}</span> <b>${q.dist}</b> tiles to the <b>${q.dir}</b> · ${left}${hearts}</div>
+    <div class="small dim">${note} It is flagged on the map; an arrow at the edge of the screen points the way. Reward ${q.gold}g, ${q.credits} credits, ${q.rep} rep.${here ? ' <b>You are here.</b>' : ''}</div></div>
+    <div class="row"><button class="primary" data-act="mapgo" data-x="${q.to.x}" data-y="${q.to.y}">${here ? 'Look around' : '🧭 Walk there'}</button><button class="tiny danger" data-act="courierabandon">Abandon</button></div></div></div>`;
 }
 function hereCard(car) {
   const w = E.worldOf(car), n = E.worldAt(car);
@@ -366,7 +381,7 @@ UI.hubMap = function (car) {
     <div class="small"><b>Day ${w.day}</b> · Zone <b style="color:${RANK_COLOR[E.CAREER_RANKS[z]]}">${E.CAREER_RANKS[z]}</b> · ${seeds} <button class="tiny" data-act="mapcopy" title="Copy the world seed">Copy seed</button></div>
     <div class="row"><button data-act="mapscout" ${pending ? 'disabled' : ''} title="Spend a day to survey the land and find hidden places">🔭 Scout (1 day)</button><button data-act="mappinhere" title="Drop a marker here">📍 Pin</button>${E.worldInTown(car) ? '<button data-act="hubtab" data-sub="town">🏰 Enter town</button>' : `<button data-act="mapreturn" ${pending ? 'disabled' : ''}>🏠 Return home</button>`}</div></div>
     <div class="small dim" style="margin-top:4px">Walk with <b>WASD / arrow keys</b>, the on-screen arrows, or <b>tap a tile</b> to auto-walk. Press and hold a tile to pin it; double-tap a waypoint to fast-travel there. Dark areas are unexplored. Danger grows with distance from Hearthhold (zones F to S). Every new place gives XP.</div></div>`;
-  return `${status}${encounterPanel(car)}<div class="mapwrap"><canvas id="worldcv" width="${VW * TS}" height="${VH * TS}"></canvas><div id="mapinfo" class="mapinfo"></div></div>
+  return `${status}${encounterPanel(car)}${questPanel(car)}<div class="mapwrap"><canvas id="worldcv" width="${VW * TS}" height="${VH * TS}"></canvas><div id="mapinfo" class="mapinfo"></div></div>
     <div class="dpad"><button class="u" data-act="mapstep" data-dx="0" data-dy="-1" aria-label="North">▲</button><button class="l" data-act="mapstep" data-dx="-1" data-dy="0" aria-label="West">◀</button><button class="c" data-act="mapstep" data-dx="0" data-dy="0" aria-label="Stop">■</button><button class="r" data-act="mapstep" data-dx="1" data-dy="0" aria-label="East">▶</button><button class="d" data-act="mapstep" data-dx="0" data-dy="1" aria-label="South">▼</button></div>
     <div class="grid g2">${hereCard(car) || '<div class="panel"><h3>🧭 On the road</h3><p class="small dim">Nothing here but open land. Click anywhere explored to walk there.</p></div>'}${nearbyPanel(car)}</div>
     <div class="grid g2">${travelPanel(car)}${markersPanel(car)}</div>${overviewPanel()}`;
@@ -456,6 +471,11 @@ Object.assign(A, {
   mapstop() { stopWalk(); },
   mapscout() { stopWalk(); const car = S.save.career; const r = E.worldScout(car); hubFresh(); after(r); },
   mapchoose(d) { const car = S.save.career; const r = E.worldChoose(car, +d.i); hubFresh(); after(r); },
+  mapfight() {
+    stopWalk(); const car = S.save.career, m = E.worldAmbush(car);
+    if (!m) { S.msg = 'Nothing to fight.'; return; }
+    S.mode = 'career'; UI.persist(); UI.startRun(E.careerNewRun(car, m)); UI.beginCombat('boss');
+  },
   mapdismiss() { const car = S.save.career; E.worldDismiss(car); after(); },
   mapexplore() {
     const car = S.save.career;
@@ -575,7 +595,7 @@ window.addEventListener('keydown', ev => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target.tagName || '')) || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const car = S.save.career, p = car && E.worldOf(car).pending; if (!p) return;
   if (p.res) {
-    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); A.mapdismiss(); UI.render(true); }
+    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); if (p.res.fight) A.mapfight(); else { A.mapdismiss(); UI.render(true); } }
   } else if (/^[1-9]$/.test(ev.key)) {
     const i = +ev.key - 1, ch = p.ev.choices[i], c = (ch && ch.cost) || {};
     if (!ch) return; ev.preventDefault();

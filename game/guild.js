@@ -70,46 +70,134 @@ function rankTestStart(career) {
   return { free: true, rankTest: info.next, seed: `test|${career.char.name}|${info.next}|${career.runs}`, rank: info.next, themeId: rng.pick(th).id, rooms: 4 };
 }
 
-// ---------- courier jobs ----------
+// ---------- travelling quests: courier, escort, errand, slay ----------
+// One travelling quest at a time lives in career.courier. It marks its destination on the map, may bring ambushes on the road,
+// and completes when you arrive (or, for "slay", when the lair is cleared).
 const SETTLE = ['village', 'town', 'capital', 'racehold'];
+const KINDS = { courier: { icon: '📦', name: 'Courier job' }, escort: { icon: '🧳', name: 'Escort' }, errand: { icon: '🔎', name: 'Errand' }, slay: { icon: '🐲', name: 'Hunt' } };
+const CLIENT = ['a merchant', 'a pilgrim', 'a scholar', 'a young noble', 'a healer', 'a surveyor', 'a runaway apprentice', 'a travelling bard'];
+function dir8(dx, dy) {
+  const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'], arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
+  const i = Math.round(Math.atan2(dy, dx) / (Math.PI / 4) + 8) % 8;
+  return { name: names[i], arrow: arrows[i] };
+}
+function questInfo(career) {
+  const q = career.courier; if (!q) return null;
+  const w = E.worldOf(career), dx = q.to.x - w.x, dy = q.to.y - w.y, d = Math.hypot(dx, dy), dr = dir8(dx, dy);
+  return Object.assign({}, q, { dist: Math.round(d), dir: dr.name, arrow: dr.arrow, left: q.due - w.day, k: KINDS[q.kind || 'courier'] });
+}
 function courierOffers(career) {
   const place = guildPlace(career); if (!place) return [];
   const w = E.worldOf(career);
   const rng = new RNG(`courier|${career.wseed}|${place.id}|${career.boardN}`);
   const here = place.id === 'home' ? { x: 0, y: 0 } : place.node;
   const cands = T.structuresIn(w.sid, here.x - 70, here.y - 70, here.x + 70, here.y + 70).filter(s => SETTLE.includes(s.sub) && s.id !== place.id && Math.hypot(s.x - here.x, s.y - here.y) > 12);
-  const n = place.kind === 'capital' ? 3 : place.kind === 'town' ? 2 : 1, out = [];
+  const n = place.kind === 'capital' ? 3 : place.kind === 'town' ? 2 : 1, out = [], z = place.zone;
   for (let k = 0; k < n && cands.length; k++) {
     const s = cands.splice(rng.int(0, cands.length - 1), 1)[0];
-    const dist = Math.round(Math.hypot(s.x - here.x, s.y - here.y)), z = place.zone;
-    out.push({ id: `${place.id}:${career.boardN}:${k}`, to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 7) + 4,
+    const dist = Math.round(Math.hypot(s.x - here.x, s.y - here.y));
+    out.push({ id: `${place.id}:${career.boardN}:${k}`, kind: 'courier', to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 7) + 4,
       gold: Math.round((25 + dist * 1.3) * (1 + 0.25 * z)), credits: 1 + z, rep: 1 + Math.floor(dist / 35), from: place.name, parcel: rng.pick(['sealed letters', 'a locked coffer', 'medicine crates', 'a royal writ', 'rare seeds', 'a wrapped blade']) });
+  }
+  // escort jobs: a client walks with you and bandits and beasts attack on the road
+  const ne = place.kind === 'capital' ? 2 : place.kind === 'town' ? 1 : (rng.chance(0.5) ? 1 : 0);
+  for (let k = 0; k < ne && cands.length; k++) {
+    const s = cands.splice(rng.int(0, cands.length - 1), 1)[0];
+    const dist = Math.round(Math.hypot(s.x - here.x, s.y - here.y)), who = rng.pick(CLIENT);
+    out.push({ id: `${place.id}:${career.boardN}:e${k}`, kind: 'escort', to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 6) + 5, hp: 3,
+      gold: Math.round((60 + dist * 2.2) * (1 + 0.3 * z)), credits: 2 + z, rep: 2 + Math.floor(dist / 30), from: place.name, parcel: who });
   }
   return out;
 }
+function questMarker(career, q) {
+  const w = E.worldOf(career); w.markers = (w.markers || []).filter(m => !m.quest);
+  w.mk = (w.mk || 0) + 1;
+  w.markers.push({ id: 'q' + w.mk, x: q.to.x, y: q.to.y, name: `${(KINDS[q.kind] || KINDS.courier).icon} ${q.to.name}`.slice(0, 24), quest: true });
+}
+function questStart(career, q) {
+  const w = E.worldOf(career);
+  career.courier = Object.assign({ kind: 'courier', steps: 0, cool: 0 }, q, { due: w.day + q.days });
+  E.worldMark(career, q.to.id, 'known'); E.worldRevealAt(career, q.to.x, q.to.y, 4);
+  questMarker(career, career.courier);
+  return career.courier;
+}
 function courierAccept(career, id) {
-  if (career.courier) return { ok: false, msg: 'You already carry a parcel. Deliver or abandon it first.' };
+  if (career.courier) return { ok: false, msg: 'You already have a job on the road. Finish or abandon it first.' };
   const o = courierOffers(career).find(x => x.id === id);
   if (!o) return { ok: false, msg: 'That job is gone.' };
-  const w = E.worldOf(career);
-  career.courier = Object.assign({}, o, { due: w.day + o.days });
-  E.worldMark(career, o.to.id, 'known');
-  return { ok: true, msg: `You take ${o.parcel} for ${o.to.name} (${o.dist} tiles away). Deliver it by day ${career.courier.due}.` };
+  const q = questStart(career, o), i = questInfo(career);
+  return { ok: true, msg: o.kind === 'escort' ? `${o.parcel} (your client) joins you. Take them to ${o.to.name}, ${i.dist} tiles to the ${i.dir}, by day ${q.due}. Expect trouble on the road.` : `You take ${o.parcel} for ${o.to.name}, ${i.dist} tiles to the ${i.dir}, by day ${q.due}. It is marked on your map.` };
 }
+function clearQuest(career) { career.courier = null; const w = E.worldOf(career); w.markers = (w.markers || []).filter(m => !m.quest); }
 function courierAbandon(career) {
-  if (!career.courier) return { ok: false, msg: 'You carry no parcel.' };
-  const c = career.courier; career.courier = null; career.rep = Math.max(0, career.rep - 1);
-  return { ok: true, msg: `You hand ${c.parcel} back. The Guild notes it (-1 reputation).` };
+  if (!career.courier) return { ok: false, msg: 'You have no job on the road.' };
+  const c = career.courier; clearQuest(career); career.rep = Math.max(0, career.rep - 1);
+  return { ok: true, msg: `You drop the job (${c.parcel}). The Guild notes it (-1 reputation).` };
+}
+function questPay(career, c, late, lines, where) {
+  const f = late ? 0.5 : 1, g = Math.round(c.gold * f), cr = late ? 0 : c.credits, rp = late ? 0 : c.rep;
+  career.gold += g; career.credits += cr; career.rep += rp;
+  if (c.xpFrac) { const hub = E.careerHub(career), amt = Math.round(E.xpNeeded(career.char.level, true) * c.xpFrac); if (amt) { E.addXp(hub, amt); career.char = hub.char; lines.push(`+${amt} XP.`); } }
+  const k = c.kind || 'courier';
+  const alive = k === 'escort' ? (c.hp > 0) : true;
+  lines.push(late ? `You complete the job at ${where}, but you are late. Half pay: ${g} gold.` : k === 'escort' ? `You deliver ${c.parcel} safely to ${where}${c.hp < 3 ? ' (a bit battered)' : ''}! +${g} gold, +${cr} credits, +${rp} reputation.` : k === 'errand' ? `Errand done at ${where}! +${g} gold, +${cr} credits, +${rp} reputation.` : `Delivered ${c.parcel} to ${where}! +${g} gold, +${cr} credits, +${rp} reputation.`);
+  void alive; clearQuest(career);
 }
 function courierArrive(career, node, lines) {
-  const c = career.courier; if (!c || c.to.id !== node.id) return;
-  const w = E.worldOf(career), late = w.day > c.due, f = late ? 0.5 : 1;
-  const g = Math.round(c.gold * f), cr = late ? 0 : c.credits, rp = late ? 0 : c.rep;
-  career.gold += g; career.credits += cr; career.rep += rp; career.qdone = career.qdone || {};
-  career.courier = null;
-  lines.push(late ? `You deliver ${c.parcel} to ${node.name}, but you are late. Half pay: ${g} gold.` : `Delivered ${c.parcel} to ${node.name}! +${g} gold, +${cr} credits, +${rp} reputation.`);
+  const c = career.courier; if (!c || c.to.id !== node.id || c.kind === 'slay') return;
+  questPay(career, c, E.worldOf(career).day > c.due, lines, node.name);
 }
-
+// A lair or dungeon cleared for a "slay" quest.
+function questNodeCleared(career, nodeId, lines) {
+  const c = career.courier; if (!c || c.kind !== 'slay' || c.to.id !== nodeId) return;
+  questPay(career, c, false, lines, c.to.name);
+}
+// Strangers on the road ask for help. Returns an encounter or null.
+function strangerEvent(career, rng) {
+  if (career.courier) return null;
+  const w = E.worldOf(career), z = E.worldZone(w.x, w.y), kind = rng.pick(['escort', 'errand', 'slay', 'escort']);
+  const around = T.structuresIn(w.sid, w.x - 55, w.y - 55, w.x + 55, w.y + 55).filter(s => !s.secret && Math.hypot(s.x - w.x, s.y - w.y) > 10);
+  const pool = kind === 'escort' ? around.filter(s => SETTLE.includes(s.sub)) : kind === 'slay' ? around.filter(s => s.sub === 'lair') : around.filter(s => ['ruins', 'grove', 'mine', 'shrine', 'spring', 'hermit'].includes(s.sub));
+  if (!pool.length) return null;
+  const s = pool[rng.int(0, pool.length - 1)], dist = Math.round(Math.hypot(s.x - w.x, s.y - w.y)), who = rng.pick(CLIENT);
+  const q = { kind, to: { id: s.id, name: s.name, x: s.x, y: s.y, sub: s.sub }, dist, days: Math.ceil(dist / 6) + 5, from: 'a stranger', parcel: who, xpFrac: 0.05,
+    gold: Math.round((50 + dist * 1.8) * (1 + 0.3 * z) * (kind === 'slay' ? 1.5 : 1)), credits: 1 + z, rep: 2, hp: 3 };
+  const text = kind === 'escort' ? `${who[0].toUpperCase() + who.slice(1)} begs you to be their escort to ${s.name}: "The roads are not safe. I can pay."`
+    : kind === 'slay' ? `A frightened local points toward ${s.name}: "Monsters nest there and they have taken everything. Clear them out and I will pay what I have."`
+    : `A stranger presses a request on you: "I lost something precious near ${s.name}. Go there and see what you can find. I will pay on your return."`;
+  return { road: true, nodeName: 'A stranger', icon: kind === 'escort' ? '🧳' : kind === 'slay' ? '🐲' : '🔎', title: kind === 'escort' ? 'A traveller asks for protection' : kind === 'slay' ? 'A local begs for help' : 'A stranger has a request',
+    text: text + ` (${dist} tiles away, about ${q.gold} gold.)`, choices: [
+      { label: kind === 'escort' ? 'Agree to escort them' : kind === 'slay' ? 'Accept the hunt' : 'Take the errand', out: { text: 'You accept. It is marked on your map.', quest: q } },
+      { label: 'Decline politely', out: { text: 'They thank you anyway and move on.' } }] };
+}
+// An ambush on the road: a fight on the map. Escort jobs draw more of them.
+function ambushEvent(career, rng) {
+  const w = E.worldOf(career), z = E.worldZone(w.x, w.y), q = career.courier, esc = q && q.kind === 'escort';
+  const foes = rng.pick([['Road bandits', 'bandits'], ['Highwaymen', 'highwaymen'], ['Raiders', 'raiders'], ['Cutthroats', 'cutthroats']]);
+  const pay = Math.round(40 * (1 + z * 0.6));
+  return { road: true, ambush: true, nodeName: 'Ambush!', icon: '⚔️', title: `Ambush: ${foes[0]}!`, text: `${foes[0]} spring from cover${esc ? ' and go for your client' : ''}. Choose quickly.`, ambushName: foes[0], choices: [
+    { label: 'Draw steel and fight', fight: true, out: { text: 'You step forward to meet them.' } },
+    { label: `Pay them off (${pay}g)`, cost: { gold: pay }, out: { text: 'They take the coin and melt away.' } },
+    { label: 'Slip away (AGI)', check: { stat: 'AGI', dc: esc ? 1 : -1 }, win: { text: 'You lose them in the brush.' }, lose: { text: 'They catch you!', fight: true } }] };
+}
+function questStep(career, rng) {
+  const q = career.courier; if (!q) return null;
+  const w = E.worldOf(career); q.cool = (q.cool || 0) + 1;
+  if (q.cool < 9) return null;
+  const z = E.worldZone(w.x, w.y), p = (q.kind === 'escort' ? 0.045 : 0.02) * (1 + z * 0.12);
+  if (!rng.chance(p)) return null;
+  q.cool = 0;
+  return ambushEvent(career, rng);
+}
+// The fight itself: a rival party of fighters, fought to a yield.
+function worldAmbush(career) {
+  const w = E.worldOf(career), p = w.pending;
+  if (!p || !p.res || !p.res.fight) return null;
+  const z = E.worldZone(w.x, w.y), rk = rankOf(z), rng = new RNG(`ambush|${w.seed}|${w.day}|${w.x}|${w.y}|${career.runs}`);
+  const q = career.courier, n = Math.min(3, 2 + (q && q.kind === 'escort' ? 1 : 0) + (z >= 4 ? 1 : 0)), roles = ROLES.slice(), members = [];
+  for (let m = 0; m < n; m++) members.push({ role: roles.splice(rng.int(0, roles.length - 1), 1)[0], name: rng.pick(FIRST) });
+  return { free: true, ambush: true, duel: { name: p.ev.ambushName || 'Bandits', members, hpMult: 0.85 + 0.03 * z, legendary: false, label: 'Ambush' }, seed: `amb|${w.seed}|${w.day}|${career.runs}`, rank: rk, themeId: 'warrens', rooms: 1 };
+}
 // ---------- legendary parties ----------
 const LEGEND = ['The Hundred Blades', 'Crimson Dawn', 'Order of the Last Sun', 'The Unbroken Few', 'Starfall Vanguard', 'The Nine Wardens', 'Wyrmbane Company', 'The Silent Choir', 'Ironbound Saints', 'The Wandering Crown'];
 const QUOTE = ['"We closed three rifts last winter. The fourth will not close itself."', '"Strength is cheap. Surviving the fifth floor is not."', '"Any fool can start a legend. We are still finishing ours."', '"Bring coin, bring nerve, and leave your pride at the door."', '"The deeper you go, the quieter it gets. That is when we start listening."'];
@@ -199,6 +287,21 @@ function tourneyWithdraw(career) {
 }
 function tourneyPrize(t, round) { return round >= 2 ? 3 : round + 1; }
 function guildAfterRun(career, run, outcome, res) {
+  // road ambush
+  if (run.ambush) {
+    const w = E.worldOf(career), q = career.courier;
+    w.pending = null;
+    if (outcome === 'cleared') res.ambush = { won: true, text: 'You beat the attackers back.' };
+    else {
+      const lost = Math.floor(career.gold * 0.1); career.gold -= lost;
+      res.ambush = { won: false, lost, text: `You are beaten back and robbed of ${lost} gold.` };
+      if (q && q.kind === 'escort') {
+        q.hp = (q.hp || 3) - 1;
+        if (q.hp <= 0) { res.ambush.text += ` ${q.parcel} did not survive the road. The job is failed.`; career.rep = Math.max(0, career.rep - 3); clearQuest(career); }
+        else res.ambush.text += ` ${q.parcel} is hurt (${q.hp}/3 left).`;
+      }
+    }
+  }
   // rank test
   if (run.rankTest) {
     if (outcome === 'cleared') {
@@ -292,6 +395,6 @@ function grandBuy(career, node, i) {
   return { ok: true, msg: `Bought ${it.name || 'an item'} for ${it.price}g.` };
 }
 
-Object.assign(E, { guildPlace, guildBoard, canTake, takeNote, rankTestInfo, rankTestStart, courierOffers, courierAccept, courierAbandon, courierArrive, legendaryParties, legendaryOffers,
+Object.assign(E, { questInfo, questStart, questStep, strangerEvent, ambushEvent, worldAmbush, questNodeCleared, dir8, guildPlace, guildBoard, canTake, takeNote, rankTestInfo, rankTestStart, courierOffers, courierAccept, courierAbandon, courierArrive, legendaryParties, legendaryOffers,
   arenaPlace, arenaStatus, tourneyEnter, tourneyFight, tourneyWithdraw, tourneyPrize, guildAfterRun, palaceInfo, royalOffers, royalTake, royalDone, grandStock, grandBuy, AUDIENCE_REP });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

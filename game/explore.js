@@ -43,6 +43,8 @@ function worldOf(career) {
   markView(w, 0, 0, SIGHT + 4);
   return w;
 }
+// busy: an unresolved choice, or an ambush you have not fought yet
+const busy = w => !!(w.pending && (!w.pending.res || w.pending.res.fight));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const inTown = w => Math.hypot(w.x, w.y) <= 2.5;
 function worldInTown(career) { return inTown(worldOf(career)); }
@@ -277,6 +279,8 @@ function applyOut(career, node, out, res, rng, ctx) {
   }
   if (out.cure) { if (career.char.injuries && career.char.injuries.length) { career.char.injuries = []; res.lines.push('Your injuries are healed.'); } }
   if (out.bless) { career.blessNext = true; res.lines.push('Blessed: +15% damage on your next expedition.'); }
+  if (out.fight) res.fight = true;
+  if (out.quest) { E.questStart(career, out.quest); res.lines.push(`New job: ${out.quest.parcel} → ${out.quest.to.name}.`); }
   if (out.waystone) node.waystone = true;
   if (out.reveal) { const n = revealRadius(career, 6 + out.reveal * 4, true); res.lines.push(n ? 'The map fills in around you.' : 'You already know this land well.'); }
 }
@@ -296,6 +300,7 @@ function setPending(career, node, ev, first) {
 }
 function arrive(career, node, lines) {
   const w = worldOf(career);
+  if (E.courierArrive) E.courierArrive(career, node, lines);
   const first = !(w.disc.node[node.id]);
   w.disc.node[node.id] = 1;
   const discover = () => {
@@ -305,7 +310,6 @@ function arrive(career, node, lines) {
   if (node.settlement) {
     raise(node, 'visited');
     const fresh = !node.waystone; node.waystone = true;
-    if (E.courierArrive) E.courierArrive(career, node, lines);
     if (first) discover();
     if (fresh) lines.push(`${node.name} is now a waypoint: you can fast-travel here.`);
     commit(career, node);
@@ -335,7 +339,7 @@ function atNode(career) {
 // One step on the grid. Returns { ok, msg, arrived, day, pending }.
 function worldStep(career, dx, dy) {
   const w = worldOf(career);
-  if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
+  if (busy(w)) return { ok: false, msg: w.pending.res ? 'You must deal with the ambush first!' : 'Finish what you are doing here first.' };
   const nx = w.x + dx, ny = w.y + dy, c = T.cost(w.sid, nx, ny);
   if (!c) return { ok: false, msg: 'Deep water blocks the way.' };
   w.pending = null;
@@ -345,8 +349,9 @@ function worldStep(career, dx, dy) {
   while (w.cost >= 8) {
     w.cost -= 8; tickDays(career, 1); day = true;
     const rr = new RNG(w.seed + '|road|' + w.day);
-    if (!w.pending && !inTown(w) && !T.structAt(w.sid, nx, ny) && rr.chance(0.17)) setPending(career, null, Object.assign({ road: true, nodeName: 'On the road' }, rr.pick(ROAD)), false);
+    if (!w.pending && !inTown(w) && !T.structAt(w.sid, nx, ny) && rr.chance(0.17)) setPending(career, null, (rr.chance(0.22) && E.strangerEvent(career, rr)) || Object.assign({ road: true, nodeName: 'On the road' }, rr.pick(ROAD)), false);
   }
+  if (!w.pending && !inTown(w) && !T.structAt(w.sid, nx, ny) && career.courier) { const ev = E.questStep(career, new RNG(w.seed + '|amb|' + w.steps)); if (ev) setPending(career, null, ev, false); }
   markView(w, nx, ny, sightOf(career));
   for (const s of T.structuresIn(w.sid, nx - 5, ny - 5, nx + 5, ny + 5)) if (!s.secret && dist(s, w) <= 5) upgrade(w, s, 'known');
   let arrived = null;
@@ -362,7 +367,7 @@ function worldStep(career, dx, dy) {
 function worldRevisit(career) {
   const w = worldOf(career), n = atNode(career);
   if (!n) return { ok: false, msg: 'Nothing here.' };
-  if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
+  if (busy(w)) return { ok: false, msg: w.pending.res ? 'You must deal with the ambush first!' : 'Finish what you are doing here first.' };
   const lines = [];
   arrive(career, n, lines);
   return { ok: true, msg: lines.join(' ') };
@@ -407,7 +412,7 @@ function worldPathTo(career, x, y) {
 }
 function worldScout(career) {
   const w = worldOf(career);
-  if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
+  if (busy(w)) return { ok: false, msg: w.pending.res ? 'You must deal with the ambush first!' : 'Finish what you are doing here first.' };
   const hub = hubOf(career), prof = PROF_BY[career.char.prof], race = RACE_BY[career.char.race];
   const p = Math.min(0.92, 0.5 + hub.d.st.LUK * 0.03 + (prof.scout ? 0.2 : 0) + (race.fx.secret || 0) + (hasTalent(career.char, 'fated') ? 0.2 : 0));
   tickDays(career, 1);
@@ -446,6 +451,7 @@ function worldChoose(career, idx) {
     res.lines.push(`${ch.check.stat} check: ${r.roll} + ${r.bonus} vs DC ${r.dc}: ${r.ok ? 'success' : 'failure'}.`);
     applyOut(career, fakeNode, r.ok ? ch.win : ch.lose, res, rng, ctx);
   } else applyOut(career, fakeNode, ch.out, res, rng, ctx);
+  if (ch.fight) res.fight = true;
   p.res = res;
   if (node) {
     raise(node, 'visited');
@@ -456,7 +462,7 @@ function worldChoose(career, idx) {
   w.log.push(`Day ${w.day}: ${p.ev.title}`); if (w.log.length > 30) w.log.shift();
   return { ok: true, msg: '' };
 }
-function worldDismiss(career) { const w = worldOf(career); w.pending = null; }
+function worldDismiss(career) { const w = worldOf(career); if (w.pending && w.pending.res && w.pending.res.fight) return; w.pending = null; }
 function attuned(career) {
   const w = worldOf(career);
   return Object.keys(w.st).filter(id => w.st[id].waystone).map(id => nodeOf(career, id)).filter(Boolean);
@@ -464,7 +470,7 @@ function attuned(career) {
 function worldReturn(career) {
   const w = worldOf(career);
   if (inTown(w)) return { ok: false, msg: 'You are already in town.' };
-  if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
+  if (busy(w)) return { ok: false, msg: w.pending.res ? 'You must deal with the ambush first!' : 'Finish what you are doing here first.' };
   const here = atNode(career);
   const warp = attuned(career).length && here && here.waystone;
   const days = warp ? 1 : Math.min(4, Math.max(1, Math.ceil(Math.hypot(w.x, w.y) / 14)));
@@ -482,7 +488,7 @@ function warpInfo(career, id) {
 }
 function worldWarp(career, id) {
   const w = worldOf(career);
-  if (w.pending && !w.pending.res) return { ok: false, msg: 'Finish what you are doing here first.' };
+  if (busy(w)) return { ok: false, msg: w.pending.res ? 'You must deal with the ambush first!' : 'Finish what you are doing here first.' };
   const info = warpInfo(career, id);
   if (!info) return { ok: false, msg: 'That waypoint is not attuned.' };
   if (info.dist < 0.5) return { ok: false, msg: 'You are already there.' };
@@ -520,6 +526,7 @@ function worldAfterRun(career, run, outcome, res) {
     const first = !node.clears;
     node.clears = (node.clears || 0) + 1; node.state = 'cleared';
     commit(career, node);
+    res.questLines = res.questLines || []; E.questNodeCleared(career, node.id, res.questLines);
     const ring = Math.max(0, node.ring);
     markView(w, node.x, node.y, 14);
     if (first) {
@@ -605,7 +612,8 @@ function buyLesson(career) {
   career.credits -= cost; career.lessons = (career.lessons || 0) + 1; career.char.skillPts += 1;
   return { ok: true, msg: 'The masters teach you something new. +1 skill point.' };
 }
-Object.assign(E, { warpInfo, partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, worldMark, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
+function worldRevealAt(career, x, y, r) { markView(worldOf(career), x, y, r); }
+Object.assign(E, { worldRevealAt, warpInfo, partyPlace, worldOf, worldNode: nodeOf, worldInTown, worldAt: atNode, bankDeposit, bankWithdraw, respec, respecCost, buyLesson, lessonCost, lessonCap, worldMark, worldRace, raceBoon, worldStep, worldRevisit, worldPathTo, worldRoute, worldPin, worldUnpin, worldKnownAll, worldScout, worldChoose, worldDismiss, worldReturn, worldWarp, worldEnter, worldAfterRun, worldNodeLocked: nodeLocked,
   worldKnown: knownNodes, worldNear: structsNear, worldAttuned: attuned, worldIsExplored: isEx, worldSight: sightOf, worldZone: zoneAt, randomSeedText,
   WORLD: { POI, SIGHT, ROAD }, nodeRank });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

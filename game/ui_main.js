@@ -78,7 +78,7 @@ function endRun(outcome) {
   for (const k of Object.keys(run.mats)) addUnique(j.mats, k);
   if (res.mission && res.mission.done) j.missions++;
   const c = run.char, th = run.dungeon.theme.name;
-  const line = res.yielded ? `You yielded the bout${res.tourney ? ' against ' + res.tourney.foe : ''} and walk out of the arena unharmed.` : outcome === 'cleared' ? `You defeated ${th}'s guardian with ${run.stats.rooms} rooms cleared.`
+  const line = res.ambush ? (res.ambush.won ? 'You beat the ambushers and the road is clear again.' : 'You were beaten back on the road.') : res.yielded ? `You yielded the bout${res.tourney ? ' against ' + res.tourney.foe : ''} and walk out of the arena unharmed.` : outcome === 'cleared' ? `You defeated ${th}'s guardian with ${run.stats.rooms} rooms cleared.`
     : outcome === 'extracted' ? `You left ${th} after ${run.stats.rooms} room(s) with your loot intact.`
     : career ? (res.permadeath ? `${c.name} fell in ${th}. In hardcore mode, that is the end.` : `You fell in ${th} after ${run.stats.rooms} room(s) and woke up at the Guild, injured.`) : `You fell in ${th} after ${run.stats.rooms} room(s).`;
   const share = `${career ? 'Daily Random Dungeon - Career' : 'Daily Random Dungeon ' + S.date}\n${c.name} the ${c.race} ${c.prof} (${tierOf(c.tier).name}, LUK ${run.d.st.LUK})\n${th} [${run.rankId}]${run.dungeon.anomaly ? ' ' + E.ANOMALIES[run.dungeon.anomaly].name : ''} - ${outcome === 'cleared' ? 'CLEARED' : outcome === 'extracted' ? 'extracted' : 'died'} · rooms ${run.stats.rooms} · heat ${run.heat} · Lv ${c.level}${run.stats.secrets ? ' · secret found' : ''}${res.mission && res.mission.done ? ' · mission complete' : ''}`;
